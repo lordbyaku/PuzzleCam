@@ -7,6 +7,64 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.3.1] — 2026-09-21
+
+### Diperbaiki
+- Dialog browser berbahasa Inggris "Failed to acquire camera feed: …" muncul
+  saat izin kamera ditolak. Itu datang dari `camera_utils`, yang memanggil
+  `alert()` sendiri sebelum melempar error. `alert` kini dibungkam selama
+  `kamera.start()` sehingga yang terlihat hanya kartu bantuan bahasa Indonesia.
+- Pelacakan tangan bisa berhenti diam-diam selamanya. `Camera.onFrame()`
+  dipanggil pustakanya tanpa `try/catch` dan rantai `requestAnimationFrame`-nya
+  hanya dilanjutkan lewat `.then()`, jadi satu lemparan sinkron dari
+  `hands.send()` mematikan pengiriman frame — permainan tetap tergambar tapi
+  tangan tidak lagi terdeteksi, tanpa pesan apa pun.
+- Bilah kemajuan dan pencacah kepingan tertimpa pratinjau kamera di semua
+  lebar HP (320–414 px). Keduanya kini rata kiri dan lebarnya berhenti sebelum
+  kotak pratinjau.
+- Judul di layar menu menyenggol pratinjau kamera di layar sempit. Kartu
+  tingkat kini dimulai cukup jauh di bawah pratinjau sehingga judul kebagian
+  ruang.
+- `setup-mediapipe.sh` gagal "Permission denied" saat dijalankan ulang: tarball
+  npm memasang berkasnya mode 444 dan `cp` biasa tidak bisa menimpanya. Karena
+  `set -e`, skrip berhenti di tengah dan menyisakan `mediapipe/` separuh jadi.
+- Posisi awal kepingan tidak pernah dijepit ke area main — di layar sangat
+  pendek zona sebar bisa melewatinya. `sebar()` kini memanggil `jagaDiArea()`,
+  sama seperti `lepas()`.
+- Label tombol meluber keluar pilnya di lebar HP — "Ganti tingkat" butuh
+  ~130 px sedangkan pilnya hanya 101 px di layar 375 px. Huruf kini mengecil
+  otomatis sampai muat.
+
+### Ditambahkan
+- `package.json` dengan `npm test`, `npm start`, dan `npm run setup`. Tetap
+  nol dependensi; `npm install` tidak pernah perlu dijalankan.
+- Empat uji regresi baru (total 25): tabrakan bilah kemajuan dengan pratinjau
+  kamera, ruang judul menu, penyebaran kepingan, dan label tombol yang muat di
+  pilnya. Keempatnya sudah diverifikasi **gagal** pada kode sebelum perbaikan.
+- `kotakKamera()` dan `bilahKotak()` sebagai satu-satunya sumber geometri
+  pratinjau kamera dan bilah kemajuan, supaya bisa diuji tanpa menggambar.
+- `teksMuat()` di M9: menggambar teks sambil mengecilkan hurufnya sampai muat
+  di lebar yang diberikan.
+- Stub canvas di harness kini menaksir lebar teks dari `ctx.font` dan mencatat
+  setiap `fillText`, sehingga teks yang meluber bisa ditangkap tanpa browser.
+- `.gitattributes` yang memaksa LF — Git di Windows meng-checkout
+  `setup-mediapipe.sh` dengan CRLF dan bash menolak menjalankannya.
+
+### Diubah
+- `test/harness.js` dipindahkan dari akar folder. Berkasnya mencari
+  `__dirname/../index.html` dan DEV.md menyebut `node test/harness.js`, jadi
+  dijalankan apa adanya selalu ENOENT.
+- Google Fonts dimuat non-blocking. Bila wifi tamu memblokir
+  `fonts.googleapis.com`, halaman tampil seketika dengan font sistem alih-alih
+  menunggu DNS timeout.
+- DEV.md meluruskan klaim "ES5-compatible": yang dibatasi hanya sintaksnya,
+  sedangkan built-in ES6 (`Promise`, `Math.hypot`) memang dipakai dan aman
+  karena MediaPipe sendiri menuntut browser 2021 ke atas.
+- Perhitungan teks kartu tingkat disederhanakan; satu cabang lama tidak pernah
+  terpakai.
+
+---
+
 ## [1.3.0] — 2026-09-21
 
 ### Ditambahkan

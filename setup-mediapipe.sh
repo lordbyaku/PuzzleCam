@@ -40,10 +40,15 @@ BERKAS=(
   hand_landmark_full.tflite
   hand_landmark_lite.tflite
 )
+# -f wajib: tarball npm memasang berkasnya mode 444, jadi cp biasa gagal
+# "Permission denied" saat skrip ini dijalankan ulang dan set -e menghentikan
+# semuanya di tengah jalan, menyisakan mediapipe/ yang separuh jadi.
 for b in "${BERKAS[@]}"; do
-  cp "$TMP/hands/$b" "$TUJUAN/$b"
+  cp -f "$TMP/hands/$b" "$TUJUAN/$b"
+  chmod u+w "$TUJUAN/$b"
 done
-cp "$TMP/camu/camera_utils.js" "$TUJUAN/camera_utils.js"
+cp -f "$TMP/camu/camera_utils.js" "$TUJUAN/camera_utils.js"
+chmod u+w "$TUJUAN/camera_utils.js"
 
 echo "→ Memeriksa hasil"
 KURANG=0

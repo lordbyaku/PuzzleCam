@@ -12,15 +12,26 @@ const cocok=html.match(/<script>([\s\S]*?)<\/script>/g);
 if(!cocok) throw new Error('blok <script> tidak ditemukan di index.html');
 const js=cocok[cocok.length-1].replace(/^<script>/,'').replace(/<\/script>$/,'');
 
+/* Perkiraan lebar huruf Baloo 2: ~0.52 em per karakter. Kasar, tapi cukup
+   untuk menangkap label yang meluber keluar tombolnya di layar sempit. */
+function lebarTeks(t,font){
+  const m=/(\d+(?:\.\d+)?)px/.exec(font||'');
+  return String(t).length*(m?parseFloat(m[1]):16)*0.52;
+}
+let jejakTeks=[];
 function ctxStub(){
   const noop=()=>{};
-  const c={};
+  const c={font:'',textAlign:'center'};
   ['beginPath','moveTo','lineTo','arcTo','arc','closePath','fill','stroke','clip','save','restore',
    'fillRect','strokeRect','clearRect','translate','scale','rotate','setTransform','setLineDash',
-   'drawImage','fillText','strokeText','rect'].forEach(k=>c[k]=noop);
+   'drawImage','strokeText','rect'].forEach(k=>c[k]=noop);
   c.createRadialGradient=()=>({addColorStop:noop});
   c.createLinearGradient=()=>({addColorStop:noop});
-  c.measureText=()=>({width:50});
+  c.measureText=t=>({width:lebarTeks(t,c.font)});
+  c.fillText=(t,x,y)=>{
+    const w=lebarTeks(t,c.font);
+    jejakTeks.push({t:String(t),x:x,y:y,w:w,rata:c.textAlign});
+  };
   return c;
 }
 function el(){
@@ -237,6 +248,72 @@ t('layar kalibrasi selesai otomatis',()=>{
   g.onResults(hand(0.5,0.5,true)); g.onResults(hand(0.5,0.5,false));
   for(let i=0;i<60 && g.layar==='kalibrasi';i++){ g.onResults(hand(0.5,0.5,false)); frames(1,60); }
   assert(g.layar==='menu','kalibrasi tidak lanjut ke menu, dapat '+g.layar);
+});
+
+console.log('— uji tabrakan tata letak dengan pratinjau kamera —');
+// Pratinjau kamera digambar paling akhir, jadi apa pun yang beririsan
+// dengannya akan tertutup. Lebar HP adalah kasus yang paling sempit.
+const sempit=[[320,360],[320,568],[360,640],[375,812],[390,844],[414,896],[430,932],[768,1024],[1280,800]];
+
+t('bilah kemajuan tidak tertimpa pratinjau kamera',()=>{
+  sempit.forEach(([w,h])=>{
+    g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
+    const kam=g.kotakKamera(), bil=g.bilahKotak();
+    const beririsan = bil.x+bil.w > kam.x && bil.y < kam.y+kam.h && bil.y+bil.h > kam.y;
+    assert(!beririsan, w+'x'+h+': bilah berakhir di '+(bil.x+bil.w).toFixed(0)+
+                      ' sedangkan kamera mulai di '+kam.x.toFixed(0));
+    assert(bil.w>=72, w+'x'+h+': bilah terlalu pendek untuk terbaca');
+  });
+});
+
+t('judul menu punya ruang di bawah pratinjau kamera',()=>{
+  sempit.forEach(([w,h])=>{
+    g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
+    g.layar='menu'; g.susunTombol();
+    const kam=g.kotakKamera();
+    const judul=Math.min(64,g.W*0.115);
+    const celah=g.rakMenu.y-(kam.y+kam.h);
+    assert(celah>=judul*0.62+40, w+'x'+h+': celah judul hanya '+celah.toFixed(0)+
+                                 'px, butuh '+(judul*0.62+40).toFixed(0)+'px');
+  });
+});
+
+t('kepingan hasil sebar tetap di dalam area main',()=>{
+  sempit.forEach(([w,h])=>{
+    g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
+    ['mudah','sedang','sulit'].forEach(lv=>{
+      g.GRID=g.TINGKAT[lv].grid; g.hitungPapan(); g.buatKeping();
+      const c=g.papan.cell, a=g.areaMain;
+      g.keping.forEach((p,i)=>{
+        assert(p.x>=a.x-0.5 && p.x+c<=a.x+a.w+0.5,
+               w+'x'+h+'/'+lv+': kepingan '+i+' keluar area main horizontal');
+        assert(p.y>=a.y-0.5 && p.y+c<=a.y+a.h+0.5,
+               w+'x'+h+'/'+lv+': kepingan '+i+' keluar area main vertikal');
+      });
+    });
+  });
+  g.keMenu();
+});
+
+t('label tombol tidak meluber keluar pilnya',()=>{
+  sempit.forEach(([w,h])=>{
+    g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
+    ['menu','main','menang','kalibrasi'].forEach(l=>{
+      g.layar=l; g.susunTombol();
+      g.tombol.forEach(b=>{
+        jejakTeks.length=0;
+        g.gambarTombol(b);
+        jejakTeks.forEach(j=>{
+          const kiri = j.rata==='left' ? j.x : j.x-j.w/2;
+          assert(kiri>=b.x-1 && kiri+j.w<=b.x+b.w+1,
+                 w+'x'+h+' '+l+'/'+b.id+': "'+j.t+'" selebar '+j.w.toFixed(0)+
+                 'px tidak muat di pil '+b.w.toFixed(0)+'px');
+        });
+      });
+    });
+  });
+  jejakTeks.length=0;
+  g.keMenu();
 });
 
 console.log('\nhasil: '+lolos+' lolos, '+gagal+' gagal');

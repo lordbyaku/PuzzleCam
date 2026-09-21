@@ -10,7 +10,7 @@ Panduan untuk developer yang meneruskan atau memodifikasi permainan ini.
 | --- | --- |
 | Arsitektur | Satu berkas `index.html`, semua CSS dan JS inline |
 | Build step | Tidak ada. Berkas yang kamu edit persis berkas yang dijalankan browser |
-| Framework | Tidak ada. Vanilla JS, ES5-compatible (`var`, tanpa arrow function) |
+| Framework | Tidak ada. Vanilla JS, sintaks ES5 (`var`, tanpa arrow function) |
 | Render | Satu `<canvas>` penuh layar. Tidak ada elemen DOM untuk UI permainan |
 | Input | MediaPipe Hands → landmark tangan → kursor + gestur cubit |
 | Aset | Di-host sendiri di `mediapipe/`, nol permintaan ke CDN saat bermain |
@@ -24,15 +24,24 @@ modul M6–M12 dulu — mesin tangannya (M3, M4, M7) yang dipakai bersama.
 **Kenapa ES5?** Tablet lobi kadang memakai browser lama. Sintaks konservatif
 menghindari halaman blank tanpa pesan error.
 
+Yang dibatasi hanya **sintaksnya**. Built-in ES6 seperti `Promise` dan
+`Math.hypot` tetap dipakai dan memang ada di kode — batas bawah yang
+sesungguhnya ditentukan MediaPipe, yang menuntut WebAssembly SIMD, yaitu
+browser 2021 ke atas. Browser yang tidak punya `Math.hypot` juga tidak akan
+bisa memuat pelacak tangannya, jadi polyfill untuk itu hanya kode mati.
+
 ---
 
 ## 2. Menjalankan
 
 ```bash
-bash setup-mediapipe.sh       # sekali saja, mengisi folder mediapipe/ (~24 MB)
-python3 -m http.server 5500   # atau: VS Code → Live Server
-# buka http://localhost:5500
+npm run setup     # = bash setup-mediapipe.sh, mengisi mediapipe/ (~24 MB)
+npm start         # = python -m http.server 5500
+npm test          # = node test/harness.js
 ```
+
+`npm` di sini hanya pembungkus perintah; proyek ini nol dependensi dan tidak
+pernah butuh `npm install`. Skrip setup aman dijalankan berkali-kali.
 
 Kamera hanya jalan di `https://` atau `http://localhost`. Membuka berkas
 langsung (`file://`) akan menampilkan instruksi perbaikan, bukan permainan.
@@ -121,14 +130,14 @@ ganti jadi ambang jarak tetap.
 ## 5. Uji otomatis
 
 ```bash
-node test/harness.js
+npm test          # = node test/harness.js
 ```
 
 Tidak butuh browser dan tidak butuh `npm install`. Skrip mengambil blok
 `<script>` terakhir dari `index.html`, menjalankannya di `vm` Node di atas
 stub canvas/DOM, lalu menyuntikkan landmark tangan palsu untuk meniru pemain.
 
-Cakupannya 21 skenario:
+Cakupannya 25 skenario:
 
 - tata letak di 8 ukuran layar × 3 tingkat × 4 layar — semua tombol wajib di dalam viewport
 - alur penuh menu → tingkat → hitung mundur → menyusun 4 kepingan → menang
@@ -139,10 +148,24 @@ Cakupannya 21 skenario:
 - dwell nonaktif saat sedang mencubit
 - toggle suara, sistem petunjuk, animasi tempel, layar kalibrasi
 - 1000 frame tanpa tangan
+- bilah kemajuan tidak beririsan dengan pratinjau kamera di 9 ukuran layar
+- judul menu punya ruang cukup di bawah pratinjau kamera
+- kepingan hasil sebar awal tidak keluar dari area main
+- label tombol muat di dalam pilnya di 9 ukuran layar × 4 layar
 
 **Jalankan ini sebelum setiap commit.** Kalau kamu menambah tombol atau layar,
 tambahkan id-nya ke daftar layar di uji tata letak — itu yang paling sering
 menangkap regresi.
+
+Uji tabrakan memakai `kotakKamera()` dan `bilahKotak()` sebagai kontrak
+geometri. Kalau kamu memindahkan pratinjau kamera atau bilah kemajuan, ubah
+kedua fungsi itu — jangan menulis ulang koordinatnya di fungsi gambar, karena
+uji-nya membaca dari sana.
+
+Stub canvas-nya menaksir lebar teks dari `ctx.font` (~0,52 em per karakter)
+dan mencatat setiap `fillText`, jadi teks yang meluber keluar tombol ikut
+tertangkap. Taksiran itu kasar; kalau kamu mengganti fontnya, sesuaikan
+`lebarTeks()` di harness.
 
 Yang **tidak** dicakup: kualitas pelacakan tangan sungguhan, izin kamera,
 dan tampilan visual. Ketiganya harus dicoba manual di perangkat asli.
@@ -161,6 +184,11 @@ vercel --prod
   `Cache-Control: immutable` untuk `/mediapipe/*`.
 - Kalau mengganti versi MediaPipe, ganti juga nama foldernya
   (`mediapipe-v2/` + ubah `MP_DIR`) supaya cache lama tidak nyangkut.
+- Repo git ada di tingkat `AIRTOUCH/`, bukan di dalam `PuzzleCam/`, karena
+  arena ini akan menampung beberapa game (lihat bagian 7). Di Vercel, set
+  **Root Directory** ke `PuzzleCam` supaya `vercel.json` terbaca.
+- `.gitattributes` memaksa LF. Tanpa itu, Git di Windows meng-checkout
+  `setup-mediapipe.sh` dengan CRLF dan bash menolak menjalankannya.
 
 Repo jadi ~24 MB. Untuk merampingkan, hapus `hands_solution_wasm_bin.js`
 dan `.wasm` (fallback non-SIMD, 6 MB) — semua browser sejak 2021 mendukung
@@ -197,6 +225,17 @@ setiap game mendaftarkan `{ perbarui, gambar, susunTombol }` miliknya sendiri.
 | Unhandled promise rejection di Chrome | `AudioContext.resume()` tanpa interaksi | v1.1.0 |
 | Game membeku total | satu exception memutus rantai `requestAnimationFrame` | v1.1.0 |
 | Kursor meleset dari titik yang dituju | lupa membalik `GAIN` saat memetakan balik koordinat | uji harness |
+| Dialog Inggris "Failed to acquire camera feed" muncul di kios | `camera_utils` memanggil `alert()` sendiri sebelum melempar error | v1.3.1 |
+| Tangan berhenti terdeteksi diam-diam, permainan tetap tergambar | `Camera.onFrame()` dipanggil tanpa `try/catch` oleh pustakanya; satu lemparan sinkron memutus rantai frame-nya | v1.3.1 |
+| Bilah kemajuan terpotong pratinjau kamera di HP | bilah di-tengah, pratinjau di pojok kanan-atas, dan pratinjau digambar belakangan | v1.3.1 |
+| `setup-mediapipe.sh` gagal saat dijalankan ulang | tarball npm memasang berkas mode 444, `cp` biasa tidak bisa menimpa | v1.3.1 |
+| Label tombol meluber keluar pilnya di HP | ukuran huruf dipatok, lebar pil ikut lebar layar | v1.3.1 |
+
+### Yang belum kena tapi sudah dijaga
+
+- Posisi awal kepingan tidak pernah dijepit ke area main; di layar sangat
+  pendek zona sebar bisa melewatinya. Sekarang `sebar()` memanggil
+  `jagaDiArea()` dan ada uji regresinya.
 
 ---
 
@@ -206,4 +245,9 @@ setiap game mendaftarkan `{ perbarui, gambar, susunTombol }` miliknya sendiri.
 - Komentar menjelaskan **kenapa**, bukan **apa**. Kode sudah menjelaskan apa.
 - Tidak ada dependensi runtime baru tanpa alasan kuat — setiap dependensi
   adalah satu lagi hal yang bisa gagal di wifi tamu hotel.
-- Setiap perubahan masuk `changelog.md` dengan semantic version.
+- Setiap perubahan masuk `changelog.md` dengan semantic version, dan versinya
+  ikut diubah di tiga tempat: komentar kepala `index.html`, `package.json`,
+  dan `changelog.md`.
+- `npm test` harus hijau sebelum commit. Setiap perbaikan bug yang bisa
+  diuji tanpa browser wajib membawa satu skenario baru di `test/harness.js` —
+  pastikan skenario itu **gagal** pada kode sebelum perbaikan.

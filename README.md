@@ -21,17 +21,23 @@ rana yang perlu diklik.
 ```
 index.html            permainan (satu berkas, tanpa dependensi build)
 setup-mediapipe.sh    pengunduh aset pelacak tangan
+package.json          pintasan perintah; nol dependensi
+test/harness.js       25 uji otomatis, tanpa browser
 vercel.json           header kamera + cache
+DEV.md                panduan developer: peta modul & konstanta tuning
 mediapipe/            aset MediaPipe, dibuat oleh setup-mediapipe.sh (~24 MB)
 ```
 
 ## Menyiapkan
 
 ```bash
-bash setup-mediapipe.sh      # sekali saja, mengisi folder mediapipe/
-python3 -m http.server 5500  # uji lokal
-# buka http://localhost:5500
+npm run setup                # mengisi folder mediapipe/, aman diulang
+npm start                    # uji lokal di http://localhost:5500
+npm test                     # 25 uji otomatis
 ```
+
+`npm` hanya jadi pembungkus perintah — tidak ada satu pun dependensi,
+jadi `npm install` tidak pernah perlu dijalankan.
 
 Kamera hanya bisa diakses lewat `https://` atau `http://localhost`.
 Membuka `index.html` langsung sebagai berkas (`file://`) akan menampilkan
@@ -45,6 +51,9 @@ vercel --prod
 
 Folder `mediapipe/` **harus ikut ter-commit** — jangan masuk `.gitignore`.
 Kalau repo terasa berat, aktifkan Git LFS untuk `*.wasm`, `*.tflite`, `*.data`.
+
+Repo git berada satu tingkat di atas (`AIRTOUCH/`), jadi di Vercel set
+**Root Directory** ke `PuzzleCam` supaya `vercel.json` ikut terbaca.
 
 ## Setelan yang sering diubah
 

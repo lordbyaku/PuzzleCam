@@ -9,7 +9,10 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8B%3C/text%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap" rel="stylesheet" />
+<!-- Dimuat non-blocking: di wifi tamu yang memblokir fonts.googleapis.com,
+     halaman tetap tampil seketika dengan font sistem. -->
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap"
+      rel="stylesheet" media="print" onload="this.media='all'" />
 <style>
   :root{
     --malam:#140A38;
@@ -72,7 +75,7 @@
 <script src="./mediapipe/camera_utils.js"></script>
 <script>
 /* ============================================================
-   PUZZLE UDARA v1.3.0
+   PUZZLE UDARA v1.3.1
    Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan.
    Tanpa mouse, tanpa keyboard, tanpa build step.
 
@@ -227,7 +230,10 @@ function susunTombol(){
   if (layar === 'menu'){
     n = URUT_TINGKAT.length;
     jarak = 14;
-    var margAtas  = Math.max(122, H * 0.30);
+    // Kartu dimulai di bawah pratinjau kamera + judul. Tanpa ini, di lebar
+    // HP judul yang di-tengah menabrak pratinjau di pojok kanan-atas.
+    var kam = kotakKamera();
+    var margAtas  = Math.max(122, H * 0.30, kam.y + kam.h + 104);
     var margBawah = 96;
     var sisa = Math.max(120, H - margAtas - margBawah);
 
@@ -385,6 +391,7 @@ function sebar(p, sudah){
     if (skorTerbaik > c * 0.8) break;
   }
   p.x = terbaik.x; p.y = terbaik.y;
+  jagaDiArea(p);        // zona sebar bisa melewati area main di layar pendek
 }
 
 /* Resize: pertahankan posisi relatif, jangan diacak ulang. */
@@ -655,6 +662,18 @@ function teks(t, x, y, ukuran, berat, warna, rata){
   ctx.fillText(t, x, y);
 }
 
+/* Kecilkan huruf sampai muat selebar `maks`. Label seperti "Ganti tingkat"
+   lebih panjang dari pilnya di lebar HP dan tanpa ini meluber keluar. */
+function teksMuat(t, x, y, ukuran, berat, warna, rata, maks){
+  var u = ukuran;
+  for (var i = 0; i < 10 && u > 9; i++){
+    ctx.font = berat + ' ' + u + 'px "Baloo 2", system-ui, sans-serif';
+    if (ctx.measureText(t).width <= maks) break;
+    u = Math.max(9, u * 0.92);
+  }
+  teks(t, x, y, u, berat, warna, rata);
+}
+
 function mulus(t){ return t < 0 ? 0 : t > 1 ? 1 : 1 - Math.pow(1 - t, 3); }
 
 function latar(){
@@ -733,18 +752,20 @@ function gambarTombol(b){
     var mx = lebar ? x + 20 : x + (w - mini)/2;
     var my = lebar ? y + (h - mini)/2 : y + 14;
     petakMini(mx, my, mini, b.grid, gelap ? '#140A38' : b.warna, gelap ? 0.5 : 0.85);
-    var tx = lebar ? mx + mini + 18 : x + w/2;
-    var rata = lebar ? 'left' : 'center';
-    var ty = lebar ? y + h/2 - 11 : y + my + mini - y + 18;
-    teks(b.label, tx, lebar ? ty : my + mini + 16, Math.min(27, h * 0.26), 700, utama, rata);
-    teks(b.grid + '×' + b.grid + ' · ' + b.sub, tx, lebar ? y + h/2 + 14 : my + mini + 38,
-         Math.min(16, h * 0.16), 500, kedua, rata);
+    var tx     = lebar ? mx + mini + 18 : x + w/2;
+    var rata   = lebar ? 'left' : 'center';
+    var yJudul = lebar ? y + h/2 - 11 : my + mini + 16;
+    var ySub   = lebar ? y + h/2 + 14 : my + mini + 38;
+    var maks   = lebar ? (x + w - 14) - tx : w - 20;
+    teksMuat(b.label, tx, yJudul, Math.min(27, h * 0.26), 700, utama, rata, maks);
+    teksMuat(b.grid + '×' + b.grid + ' · ' + b.sub, tx, ySub,
+             Math.min(16, h * 0.16), 500, kedua, rata, maks);
   } else if (b.gaya === 'kecil'){
-    teks(b.label, x + w/2, y + h/2, 15, 600, utama);
+    teksMuat(b.label, x + w/2, y + h/2, 15, 600, utama, 'center', w - 14);
   } else {
     var cy = b.sub ? y + h/2 - 11 : y + h/2;
-    teks(b.label, x + w/2, cy, Math.min(22, h * 0.34), 700, utama);
-    if (b.sub) teks(b.sub, x + w/2, y + h/2 + 14, 14, 500, kedua);
+    teksMuat(b.label, x + w/2, cy, Math.min(22, h * 0.34), 700, utama, 'center', w - 16);
+    if (b.sub) teksMuat(b.sub, x + w/2, y + h/2 + 14, 14, 500, kedua, 'center', w - 16);
   }
 }
 
@@ -843,6 +864,20 @@ function gambarKeping(p, diangkat){
 /* ============================================================
    M11 · Kursor & pratinjau kamera
    ============================================================ */
+
+/* Kotak pratinjau kamera di pojok kanan-atas — satu-satunya sumber posisinya.
+   Layar menu dan layar main memakainya untuk menyisakan ruang, supaya judul
+   dan bilah kemajuan tidak tertimpa di layar sempit.
+
+   Ruangnya disisakan tanpa melihat kamSiap: tata letak dihitung sekali di
+   ukur()/susunTombol(), sedangkan pratinjaunya baru muncul beberapa detik
+   kemudian. Kalau ikut kamSiap, tata letak tidak pernah dihitung ulang dan
+   tabrakannya balik lagi. */
+function kotakKamera(){
+  var w = Math.min(150, W * 0.28);
+  return { x:W - w - 16, y:16, w:w, h:w * 0.75 };
+}
+
 function gambarKursor(){
   if (!cursor.ada || !tanganAda) return;
   var r = cubit ? 14 : 23;
@@ -993,17 +1028,24 @@ function gambarMundur(){
        W/2, Math.min(H - 30, H * 0.5 + 176), 17, 500, 'rgba(255,255,255,.5)');
 }
 
+/* Rata kiri, bukan di tengah: pratinjau kamera memakai pojok kanan-atas
+   dan di lebar HP (<= ~420px) bilah yang di-tengah selalu tertimpa. */
+function bilahKotak(){
+  var x = 16, y = 62, h = 9;
+  return { x:x, y:y, h:h, w:Math.max(72, Math.min(280, kotakKamera().x - 14 - x)) };
+}
+
 function gambarBilah(selesai, jumlah){
-  var w = Math.min(280, W - 140), x = (W - w)/2, y = 62, h = 9;
+  var k = bilahKotak(), x = k.x, y = k.y, w = k.w, h = k.h;
   ctx.save();
   bulat(x, y, w, h, 99);
   ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
-  if (selesai > 0){
+  if (selesai > 0 && jumlah > 0){
     bulat(x, y, Math.max(h, w * (selesai / jumlah)), h, 99);
     ctx.fillStyle = '#35E0A1'; ctx.fill();
   }
   ctx.restore();
-  teks(selesai + ' / ' + jumlah, W/2, 34, 25, 700, '#fff');
+  teks(selesai + ' / ' + jumlah, x, 34, 25, 700, '#fff', 'left');
 }
 
 function gambarMain(){
@@ -1082,8 +1124,8 @@ function gambar(){
   gambarPartikel();
 
   if (layar === 'menu' || layar === 'main' || layar === 'menang'){
-    var w = Math.min(150, W * 0.28), h = w * 0.75;
-    if (kamSiap) gambarKamera(W - w - 16, 16, w, h, null);
+    var k = kotakKamera();
+    if (kamSiap) gambarKamera(k.x, k.y, k.w, k.h, null);
   }
   gambarKursor();
 }
@@ -1213,18 +1255,36 @@ function nyalakan(){
   var kamera = new Camera(video, {
     onFrame: function(){
       if (document.hidden) return Promise.resolve();   // hemat CPU saat tab tidak aktif
-      return hands.send({ image: video }).catch(function(){});
+      // camera_utils memanggil onFrame() tanpa try/catch dan hanya melanjutkan
+      // rantai requestAnimationFrame-nya lewat .then(). Satu lemparan sinkron
+      // dari hands.send() akan mematikan pengiriman frame selamanya: permainan
+      // tetap tergambar tapi tangan berhenti terdeteksi tanpa pesan apa pun.
+      try { return hands.send({ image: video }).catch(function(){}); }
+      catch (e){ return Promise.resolve(); }
     },
     width: 640, height: 480, facingMode: 'user'
   });
 
   bootPesan.textContent = 'Izinkan akses kamera untuk mulai bermain';
 
+  // camera_utils menampilkan alert() berbahasa Inggris ("Failed to acquire
+  // camera feed: …") sebelum melempar errornya. Di kios itu membingungkan;
+  // kartu bantuan berbahasa Indonesia di bawah sudah menggantikannya.
+  var alertAsli = window.alert;
+  var alertDibungkam = true;
+  window.alert = function(){};
+  function pulihkanAlert(){
+    if (!alertDibungkam) return;
+    alertDibungkam = false;
+    window.alert = alertAsli;
+  }
+
   Promise.resolve(kamera.start())
-    .then(function(){ bootPesan.textContent = 'Memuat pelacak tangan…'; })
-    .catch(function(e){ var p = pesanKameraGagal(e); gagal(p[0], p[1]); });
+    .then(function(){ pulihkanAlert(); bootPesan.textContent = 'Memuat pelacak tangan…'; })
+    .catch(function(e){ pulihkanAlert(); var p = pesanKameraGagal(e); gagal(p[0], p[1]); });
 
   setTimeout(function(){
+    pulihkanAlert();                              // jaga-jaga bila start() tak pernah selesai
     if (!kamSiap && bootHelp.hidden){
       gagal('Pelacak tangan lama sekali dimuat.', [
         'Cek apakah semua berkas di folder <b>mediapipe/</b> lengkap.',
