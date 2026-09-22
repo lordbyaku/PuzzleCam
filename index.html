@@ -150,40 +150,42 @@ var FRAME_SEGAR  = 400;    // ms; di atas ini data tangan basi untuk dwell
 var KETUK_ZONA   = 96;     // px sisi kotak pojok kiri-atas
 var KETUK_JEDA   = 1200;   // ms jarak maksimum antar ketukan
 
+// Versus: seberapa jauh pergelangan boleh melewati garis tengah kamera tanpa
+// kehilangan kendali, dan hanya selama pemain itu sedang menggenggam. Tanpa
+// toleransi ini, pergelangan yang bergetar di dekat garis tengah menukar
+// kendali bolak-balik di tengah seretan.
+var SISI_MARGIN  = 0.06;   // bagian dari lebar bingkai kamera
+
 var UNGU_MUDA = '#B79CFF';
+
+// Identitas tiap pemain. Indeks = sisi layar: 0 kiri, 1 kanan.
+var SOSOK = [
+  { nama:'Kiri',  warna:'#35E0A1' },
+  { nama:'Kanan', warna:'#FF5FA2' }
+];
 
 /* ============================================================
    M2 · Keadaan
    ============================================================ */
 var W = 0, H = 0, DPR = 1, waktu = 0;
 var layar = 'menu';                 // kalibrasi | menu | mundur | main | menang
+var mode = 'solo';                  // solo | versus
 var tingkat = 'sedang';
 var GRID = 3;
 var foto = null;
-var keping = [];
-var digenggam = null;
 var tombol = [];
-var hoverId = null, hoverT = 0;
 var mundurSisa = 0;
-var papan = { x:0, y:0, s:0, cell:0 };
-var zonaSebar = [];
-var areaMain = { x:0, y:0, w:0, h:0 };
 var rakMenu  = { x:0, y:0, w:0, h:0 };
 var konfeti = [], kilau = [], latarKeping = [];
 var kamSiap = false;
-var tanganAda = false;
-var cursor = { x:0, y:0, ada:false };
-var target = { x:0, y:0 };
-var cubit = false;
-var landmark = null;
 var lastT = 0;
 var pesan = '';
 var suaraAktif = true;
 var hematGerak = false;
 var pakaiMouse = /[?&]mouse=1/.test(location.search);
+var pemenang = null;                // pemain yang lebih dulu selesai
 
 var kalib = { lihat:0, cubitOk:false, selesai:0 };
-var tanpaProgres = 0, petunjuk = null;
 
 var diam = 0;                       // ms tanpa orang di layar bermain
 var sejakFrame = FRAME_MATI;        // ms sejak frame kamera terakhir diproses
@@ -191,11 +193,58 @@ var ketukN = 0, ketukT = 0;         // ketukan pojok untuk staf
 var kunciLayar = null;              // WakeLockSentinel, bila didukung
 var galatBeruntun = 0;              // frame galat berturut-turut di loop()
 
+/* Semua keadaan yang dimiliki seorang pemain ada di dalam satu objek di
+   sini — kursor, genggaman, papan, kepingan. Mode solo memakai satu elemen,
+   versus dua. Inilah yang membuat isolasi antar belahan bukan sekadar
+   diharapkan melainkan dijamin: fungsi yang bekerja atas nama seorang pemain
+   hanya menerima objeknya sendiri, jadi ia tidak punya jalan untuk menyentuh
+   kepingan atau kursor lawan. */
+var pemain = [];
+
+function buatPemain(jumlah){
+  pemain = [];
+  for (var i = 0; i < jumlah; i++){
+    pemain.push({
+      sisi: i,
+      nama: jumlah > 1 ? SOSOK[i].nama : 'Kamu',
+      warna: jumlah > 1 ? SOSOK[i].warna : '#FFB020',        // kursor
+      warnaPas: jumlah > 1 ? SOSOK[i].warna : 'rgba(53,224,161,.95)',  // kepingan terpasang
+      kotak: { x:0, y:0, w:0, h:0 },   // belahan layar miliknya
+
+      cursor: { x:0, y:0, ada:false },
+      target: { x:0, y:0 },
+      cubit: false,
+      hadir: false,                    // ada yang mengendalikan pemain ini
+      tangan: null,                    // landmark terakhir; null di mode ?mouse=1
+      segar: FRAME_MATI,               // ms sejak kendalinya terakhir terlihat
+
+      hoverId: null, hoverT: 0,
+
+      papan: { x:0, y:0, s:0, cell:0 },
+      zonaSebar: [],
+      areaMain: { x:0, y:0, w:0, h:0 },
+
+      keping: [],
+      digenggam: null,
+      tanpaProgres: 0,
+      petunjuk: null
+    });
+  }
+}
+
+buatPemain(1);
+
 /* ============================================================
    M3 · Tata letak
    ============================================================ */
 function jepit(v, a, b){ return Math.min(Math.max(v, a), b); }
-function potret(){ return W < H * 1.15; }
+
+/* Tata letak papan dihitung terhadap *belahan* pemain, bukan terhadap layar.
+   Di versus lanskap tiap belahan justru berbentuk potret (tinggi dan sempit),
+   jadi papan otomatis memakai susunan potret — papan di atas, kepingan
+   berserak di bawahnya. Satu rumus melayani kedua mode. */
+function potretKotak(k){ return k.w < k.h * 1.15; }
+function potret(){ return potretKotak({ w:W, h:H }); }
 
 function ukur(){
   var lamaW = W || window.innerWidth;
@@ -211,35 +260,53 @@ function ukur(){
   cv.style.height = H + 'px';
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
 
-  hitungPapan();
+  hitungBelahan();
   susunTombol();
   siapkanLatar();
-  if (keping.length) skalakanUlang(lamaW, lamaH);
 
-  cursor.x = Math.min(cursor.x, W);
-  cursor.y = Math.min(cursor.y, H);
+  for (var i = 0; i < pemain.length; i++){
+    var p = pemain[i];
+    if (p.keping.length) skalakanUlang(p, lamaW, lamaH);
+    p.cursor.x = jepit(p.cursor.x, p.kotak.x, p.kotak.x + p.kotak.w);
+    p.cursor.y = jepit(p.cursor.y, p.kotak.y, p.kotak.y + p.kotak.h);
+  }
 }
 
-function hitungPapan(){
+/* Membagi layar jadi belahan per pemain. Solo dapat seluruh layar, versus
+   membelah kiri-kanan — searah dengan posisi tangan kedua anak di depan
+   kamera, supaya pemain kiri memegang papan kiri tanpa perlu dijelaskan. */
+function hitungBelahan(){
+  var n = pemain.length;
+  for (var i = 0; i < n; i++){
+    var p = pemain[i];
+    p.kotak = (n === 1)
+      ? { x:0, y:0, w:W, h:H }
+      : { x:i * (W / 2), y:0, w:W / 2, h:H };
+    hitungPapan(p);
+  }
+}
+
+function hitungPapan(p){
+  var k = p.kotak;
   var atas = 96, bawah = 112;
-  var tinggiMain = Math.max(180, H - atas - bawah);
+  var tinggiMain = Math.max(180, k.h - atas - bawah);
   var s;
 
-  areaMain = { x:8, y:atas, w:W - 16, h:tinggiMain };
+  p.areaMain = { x:k.x + 8, y:k.y + atas, w:k.w - 16, h:tinggiMain };
 
-  if (potret()){
-    s = Math.max(160, Math.min(W * 0.88, tinggiMain * 0.62));
-    papan = { x:(W - s)/2, y:atas + 2, s:s, cell:s/GRID };
-    var yStrip = papan.y + s + 14;
-    var hStrip = Math.max(papan.cell * 1.05, (atas + tinggiMain) - yStrip);
-    zonaSebar = [{ x:10, y:yStrip, w:Math.max(papan.cell, W - 20), h:hStrip }];
+  if (potretKotak(k)){
+    s = Math.max(160, Math.min(k.w * 0.88, tinggiMain * 0.62));
+    p.papan = { x:k.x + (k.w - s)/2, y:k.y + atas + 2, s:s, cell:s/GRID };
+    var yStrip = p.papan.y + s + 14;
+    var hStrip = Math.max(p.papan.cell * 1.05, (k.y + atas + tinggiMain) - yStrip);
+    p.zonaSebar = [{ x:k.x + 10, y:yStrip, w:Math.max(p.papan.cell, k.w - 20), h:hStrip }];
   } else {
-    s = Math.max(160, Math.min(tinggiMain * 0.94, W * 0.44));
-    papan = { x:(W - s)/2, y:atas + (tinggiMain - s)/2, s:s, cell:s/GRID };
-    var pita = Math.max(papan.cell * 1.05, papan.x - 22);
-    zonaSebar = [
-      { x:10, y:atas, w:pita, h:tinggiMain },
-      { x:Math.min(W - pita - 10, papan.x + s + 10), y:atas, w:pita, h:tinggiMain }
+    s = Math.max(160, Math.min(tinggiMain * 0.94, k.w * 0.44));
+    p.papan = { x:k.x + (k.w - s)/2, y:k.y + atas + (tinggiMain - s)/2, s:s, cell:s/GRID };
+    var pita = Math.max(p.papan.cell * 1.05, (p.papan.x - k.x) - 22);
+    p.zonaSebar = [
+      { x:k.x + 10, y:k.y + atas, w:pita, h:tinggiMain },
+      { x:Math.min(k.x + k.w - pita - 10, p.papan.x + s + 10), y:k.y + atas, w:pita, h:tinggiMain }
     ];
   }
 }
@@ -247,9 +314,14 @@ function hitungPapan(){
 /* ============================================================
    M4 · Tombol tanpa sentuh (dwell click)
    ============================================================ */
-function tbl(id, label, sub, x, y, w, h, warna, aksi, gaya){
+/* `tuan` menentukan kursor siapa yang boleh menekan tombol ini. null berarti
+   milik bersama — itu yang dipakai di menu dan di mode solo. Di versus, tombol
+   di tiap belahan bertuan, sehingga seorang anak tidak bisa menekan tombol di
+   wilayah lawannya. */
+function tbl(id, label, sub, x, y, w, h, warna, aksi, gaya, tuan){
   return { id:id, label:label, sub:sub, x:x, y:y, w:w, h:h,
-           warna:warna, aksi:aksi, gaya:gaya || 'pil', grid:0 };
+           warna:warna, aksi:aksi, gaya:gaya || 'pil', grid:0,
+           tuan:tuan || null };
 }
 
 function susunTombol(){
@@ -309,7 +381,8 @@ function susunTombol(){
     total = w * 3 + jarak * 2;
     x0 = (W - total) / 2;
     y  = Math.min(H - h - 24, H - 84);
-    tombol.push(tbl('acak', 'Acak lagi',     null, x0,                 y, w, h, '#45C4FF', acakKeping));
+    tombol.push(tbl('acak', 'Acak lagi',     null, x0,                 y, w, h, '#45C4FF',
+                    acakKeping.bind(null, pemain[0])));
     tombol.push(tbl('foto', 'Foto ulang',    null, x0 + (w + jarak),   y, w, h, '#FFB020', mulaiMundur));
     tombol.push(tbl('menu', 'Ganti tingkat', null, x0 + 2*(w + jarak), y, w, h, UNGU_MUDA, keMenu));
   }
@@ -325,7 +398,7 @@ function susunTombol(){
     tombol.push(tbl('menu2', 'Ganti tingkat', null,        x0 + w + jarak, y, w, h, UNGU_MUDA, keMenu));
   }
 
-  hoverId = null; hoverT = 0;
+  for (var q = 0; q < pemain.length; q++){ pemain[q].hoverId = null; pemain[q].hoverT = 0; }
 }
 
 function kartuTingkat(kunci, t, x, y, w, h){
@@ -336,7 +409,7 @@ function kartuTingkat(kunci, t, x, y, w, h){
 
 function gantiLayar(l){
   layar = l;
-  hitungPapan();
+  hitungBelahan();
   susunTombol();
 }
 
@@ -352,13 +425,14 @@ function gantiSuara(){
 function mulaiTingkat(k){
   tingkat = k;
   GRID = TINGKAT[k].grid;
-  hitungPapan();
+  hitungBelahan();
   mulaiMundur();
 }
 
 function mulaiMundur(){
   mundurSisa = DETIK_MUNDUR;
-  digenggam = null;
+  pemenang = null;
+  for (var i = 0; i < pemain.length; i++) pemain[i].digenggam = null;
   gantiLayar('mundur');
   bunyi(660, 0.12);
 }
@@ -380,41 +454,44 @@ function jepret(){
   } catch (e){
     return false;                             // frame belum bisa digambar, coba lagi
   }
+  // Satu foto, dipakai kedua pemain. Justru itu serunya di mode versus:
+  // yang disusun adalah gambar kalian berdua.
   foto = c;
-  buatKeping();
+  for (var i = 0; i < pemain.length; i++) buatKeping(pemain[i]);
   gantiLayar('main');
   pesan = 'Cubit kepingannya, lalu tarik ke tempatnya';
-  tanpaProgres = 0; petunjuk = null;
   bunyi(880, 0.16);
   return true;
 }
 
-function buatKeping(){
-  keping = [];
+function buatKeping(pm){
+  pm.keping = [];
   for (var i = 0; i < GRID * GRID; i++){
-    keping.push({ col:i % GRID, row:Math.floor(i / GRID), x:0, y:0, pas:false, anim:null, denyut:0 });
+    pm.keping.push({ col:i % GRID, row:Math.floor(i / GRID), x:0, y:0, pas:false, anim:null, denyut:0 });
   }
-  acakKeping();
+  acakKeping(pm);
 }
 
-function acakKeping(){
-  digenggam = null;
+function acakKeping(pm){
+  pm.digenggam = null;
   var sudah = [];
-  for (var i = 0; i < keping.length; i++){
-    keping[i].pas = false;
-    keping[i].anim = null;
-    sebar(keping[i], sudah);
-    sudah.push(keping[i]);
+  for (var i = 0; i < pm.keping.length; i++){
+    pm.keping[i].pas = false;
+    pm.keping[i].anim = null;
+    sebar(pm, pm.keping[i], sudah);
+    sudah.push(pm.keping[i]);
   }
-  tanpaProgres = 0; petunjuk = null;
+  pm.tanpaProgres = 0; pm.petunjuk = null;
   if (layar === 'main') pesan = 'Cubit kepingannya, lalu tarik ke tempatnya';
 }
 
-/* Titik acak paling renggang dari kepingan lain, supaya tidak menumpuk. */
-function sebar(p, sudah){
-  var c = papan.cell, terbaik = null, skorTerbaik = -1;
+/* Titik acak paling renggang dari kepingan lain, supaya tidak menumpuk.
+   Zona sebarnya milik pemain itu sendiri, jadi kepingannya tidak pernah
+   lahir di belahan lawan. */
+function sebar(pm, kp, sudah){
+  var c = pm.papan.cell, terbaik = null, skorTerbaik = -1;
   for (var coba = 0; coba < 14; coba++){
-    var z = zonaSebar[Math.floor(Math.random() * zonaSebar.length)] || areaMain;
+    var z = pm.zonaSebar[Math.floor(Math.random() * pm.zonaSebar.length)] || pm.areaMain;
     var kx = z.x + Math.random() * Math.max(1, Math.max(z.x, z.x + z.w - c) - z.x);
     var ky = z.y + Math.random() * Math.max(1, Math.max(z.y, z.y + z.h - c) - z.y);
     var skor = Infinity;
@@ -425,45 +502,55 @@ function sebar(p, sudah){
     if (skor > skorTerbaik){ skorTerbaik = skor; terbaik = { x:kx, y:ky }; }
     if (skorTerbaik > c * 0.8) break;
   }
-  p.x = terbaik.x; p.y = terbaik.y;
-  jagaDiArea(p);        // zona sebar bisa melewati area main di layar pendek
+  kp.x = terbaik.x; kp.y = terbaik.y;
+  jagaDiArea(pm, kp);   // zona sebar bisa melewati area main di layar pendek
 }
 
 /* Resize: pertahankan posisi relatif, jangan diacak ulang. */
-function skalakanUlang(lamaW, lamaH){
+function skalakanUlang(pm, lamaW, lamaH){
   var rx = W / (lamaW || W), ry = H / (lamaH || H);
-  for (var i = 0; i < keping.length; i++){
-    var p = keping[i];
-    p.anim = null;
-    if (p.pas){
-      p.x = papan.x + p.col * papan.cell;
-      p.y = papan.y + p.row * papan.cell;
+  for (var i = 0; i < pm.keping.length; i++){
+    var kp = pm.keping[i];
+    kp.anim = null;
+    if (kp.pas){
+      kp.x = pm.papan.x + kp.col * pm.papan.cell;
+      kp.y = pm.papan.y + kp.row * pm.papan.cell;
     } else {
-      p.x *= rx; p.y *= ry;
-      jagaDiArea(p);
+      kp.x *= rx; kp.y *= ry;
+      jagaDiArea(pm, kp);
     }
   }
 }
 
-function jagaDiArea(p){
-  var c = papan.cell;
-  p.x = jepit(p.x, areaMain.x, areaMain.x + areaMain.w - c);
-  p.y = jepit(p.y, areaMain.y, areaMain.y + areaMain.h - c);
+function jagaDiArea(pm, kp){
+  var c = pm.papan.cell;
+  kp.x = jepit(kp.x, pm.areaMain.x, pm.areaMain.x + pm.areaMain.w - c);
+  kp.y = jepit(kp.y, pm.areaMain.y, pm.areaMain.y + pm.areaMain.h - c);
 }
 
 /* Satu-satunya jalan pulang. Sengaja menghapus foto: di kios lobi, foto anak
    tidak boleh tertinggal di layar untuk dilihat tamu berikutnya. */
 function keMenu(){
-  foto = null; keping = []; digenggam = null;
-  konfeti = []; kilau = []; petunjuk = null;
+  foto = null;
+  pemenang = null;
+  for (var i = 0; i < pemain.length; i++){
+    var p = pemain[i];
+    p.keping = []; p.digenggam = null;
+    p.petunjuk = null; p.tanpaProgres = 0;
+  }
+  konfeti = []; kilau = [];
   pesan = '';
   diam = 0;
   gantiLayar('menu');
 }
 
-function cekMenang(){
-  if (!keping.length) return;
-  for (var i = 0; i < keping.length; i++) if (!keping[i].pas) return;
+/* Yang lebih dulu memasang seluruh kepingannya menang. Penjaga `pemenang`
+   memastikan pemain kedua yang menyusul beberapa detik kemudian tidak
+   menimpa hasilnya. */
+function cekMenang(pm){
+  if (!pm.keping.length || pemenang) return;
+  for (var i = 0; i < pm.keping.length; i++) if (!pm.keping[i].pas) return;
+  pemenang = pm;
   gantiLayar('menang');
   taburKonfeti();
   bunyi(523, 0.12);
@@ -474,39 +561,44 @@ function cekMenang(){
 /* ============================================================
    M6 · Cubit: ambil & lepas
    ============================================================ */
-function ambil(){
+/* Inilah jaminan isolasi yang paling penting: `ambil` hanya menelusuri
+   `pm.keping`. Kepingan lawan tidak ada dalam daftar yang dilihatnya, jadi
+   mengambilnya bukan sekadar dilarang — tidak ada jalannya, bahkan ketika
+   dua kepingan berdempetan di garis tengah layar. */
+function ambil(pm){
   if (layar !== 'main' || !foto) return;
-  var c = papan.cell;
-  for (var i = keping.length - 1; i >= 0; i--){
-    var p = keping[i];
-    if (p.pas) continue;
-    if (cursor.x >= p.x && cursor.x <= p.x + c && cursor.y >= p.y && cursor.y <= p.y + c){
-      keping.splice(i, 1); keping.push(p);      // bawa ke lapisan paling atas
-      p.anim = null;
-      digenggam = p;
-      hoverId = null; hoverT = 0;
-      petunjuk = null; tanpaProgres = 0;
-      bunyi(440, 0.06, 'triangle', 0.05);
+  var c = pm.papan.cell;
+  for (var i = pm.keping.length - 1; i >= 0; i--){
+    var kp = pm.keping[i];
+    if (kp.pas) continue;
+    if (pm.cursor.x >= kp.x && pm.cursor.x <= kp.x + c &&
+        pm.cursor.y >= kp.y && pm.cursor.y <= kp.y + c){
+      pm.keping.splice(i, 1); pm.keping.push(kp);   // bawa ke lapisan paling atas
+      kp.anim = null;
+      pm.digenggam = kp;
+      pm.hoverId = null; pm.hoverT = 0;
+      pm.petunjuk = null; pm.tanpaProgres = 0;
+      bunyi(440 + pm.sisi * 60, 0.06, 'triangle', 0.05);
       return;
     }
   }
 }
 
-function lepas(){
-  if (!digenggam) return;
-  var p = digenggam;
-  digenggam = null;
-  var c = papan.cell;
-  var tx = papan.x + p.col * c, ty = papan.y + p.row * c;
-  if (Math.hypot(p.x - tx, p.y - ty) < c * SNAP){
-    p.anim = { x0:p.x, y0:p.y, t:0, dur:hematGerak ? 1 : 170 };
-    p.x = tx; p.y = ty; p.pas = true; p.denyut = 1;
+function lepas(pm){
+  if (!pm.digenggam) return;
+  var kp = pm.digenggam;
+  pm.digenggam = null;
+  var c = pm.papan.cell;
+  var tx = pm.papan.x + kp.col * c, ty = pm.papan.y + kp.row * c;
+  if (Math.hypot(kp.x - tx, kp.y - ty) < c * SNAP){
+    kp.anim = { x0:kp.x, y0:kp.y, t:0, dur:hematGerak ? 1 : 170 };
+    kp.x = tx; kp.y = ty; kp.pas = true; kp.denyut = 1;
     taburKilau(tx + c/2, ty + c/2);
-    tanpaProgres = 0; petunjuk = null;
-    bunyi(740, 0.1, 'square', 0.05);
-    cekMenang();
+    pm.tanpaProgres = 0; pm.petunjuk = null;
+    bunyi(740 + pm.sisi * 90, 0.1, 'square', 0.05);
+    cekMenang(pm);
   } else {
-    jagaDiArea(p);                              // jangan menutupi baris tombol
+    jagaDiArea(pm, kp);                             // jangan menutupi baris tombol
   }
 }
 
@@ -515,93 +607,186 @@ function lepas(){
    ============================================================ */
 function jarak(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
 
-function onResults(res){
-  var lm = (res && res.multiHandLandmarks && res.multiHandLandmarks.length)
-    ? res.multiHandLandmarks[0] : null;
-  landmark = lm;
-  sejakFrame = 0;
+/* Setengah bidang kamera milik seorang anak dipetakan ke SELURUH belahan
+   layarnya, bukan sekadar dijepit. Tanpa ini tiap anak cuma bisa menjangkau
+   separuh papannya sendiri. Di mode solo rumusnya menyederhana persis menjadi
+   pemetaan lama, jadi rasa kendalinya tidak berubah sama sekali. */
+function layarX(lm, p){
+  var k = p.kotak;
+  var x = 1 - lm[8].x;                    // dicermin: 0 kiri layar .. 1 kanan
+  var u = (pemain.length === 1) ? x : jepit((x - p.sisi * 0.5) * 2, 0, 1);
+  return k.x + jepit((u - 0.5) * GAIN + 0.5, 0, 1) * k.w;
+}
+function layarY(lm, p){
+  var k = p.kotak;
+  return k.y + jepit((lm[8].y - 0.5) * GAIN + 0.5, 0, 1) * k.h;
+}
 
+/* Posisi pergelangan di layar yang sudah dicermin, 0 kiri .. 1 kanan.
+   Pergelangan dipakai, bukan telunjuk, karena ia jauh lebih stabil saat jari
+   bergerak mencubit. */
+function xPergelangan(lm){ return 1 - lm[0].x; }
+
+/* Boleh tidaknya seorang pemain mengklaim sebuah tangan. Inilah pagar yang
+   membuat gestur dua belahan tidak saling tabrak: tangan yang jelas berada di
+   belahan lawan tidak pernah lolos di sini. Toleransi melewati garis tengah
+   hanya diberikan kepada pemain yang sedang menggenggam. */
+function bolehKlaim(p, lm){
+  var x = xPergelangan(lm);
+  var toleransi = p.digenggam ? SISI_MARGIN : 0;
+  return p.sisi === 0 ? (x < 0.5 + toleransi) : (x >= 0.5 - toleransi);
+}
+
+function tanganTerdekat(daftar, p){
+  var pilih = daftar[0], baik = Infinity;
+  for (var i = 0; i < daftar.length; i++){
+    var d = Math.hypot(layarX(daftar[i], p) - p.cursor.x,
+                       layarY(daftar[i], p) - p.cursor.y);
+    if (d < baik){ baik = d; pilih = daftar[i]; }
+  }
+  return pilih;
+}
+
+/* Bagikan tangan yang terdeteksi ke pemain. Satu pemain paling banyak satu
+   tangan, sehingga dua tangan di belahan yang sama pun hanya menggerakkan
+   satu pemain — seorang anak tidak bisa menguasai dua papan. */
+function bagiTangan(daftar){
+  var hasil = [], i;
+  for (i = 0; i < pemain.length; i++) hasil.push(null);
+  if (!daftar || !daftar.length) return hasil;
+
+  if (pemain.length === 1){
+    // Solo: pilih tangan terdekat dengan kursor sebelumnya, supaya tangan
+    // orang lain yang ikut masuk bingkai tidak merebut kendali di tengah main.
+    hasil[0] = tanganTerdekat(daftar, pemain[0]);
+    return hasil;
+  }
+
+  // Yang sedang menggenggam memilih lebih dulu — seretan yang sedang berjalan
+  // lebih berhak atas tangannya daripada pemain yang sedang menganggur.
+  var sisa = daftar.slice();
+  var urut = (pemain[1].digenggam && !pemain[0].digenggam) ? [1, 0] : [0, 1];
+  for (var u = 0; u < urut.length; u++){
+    var p = pemain[urut[u]];
+    var calon = [];
+    for (i = 0; i < sisa.length; i++) if (bolehKlaim(p, sisa[i])) calon.push(sisa[i]);
+    if (!calon.length) continue;
+    var pilih = tanganTerdekat(calon, p);
+    hasil[urut[u]] = pilih;
+    sisa.splice(sisa.indexOf(pilih), 1);
+  }
+  return hasil;
+}
+
+function perbaruiPemain(p, lm){
   if (!lm){
-    tanganAda = false;
-    if (cubit){ cubit = false; lepas(); }
+    p.tangan = null;
+    p.hadir = false;
+    if (p.cubit){ p.cubit = false; lepas(p); }
     return;
   }
-  tanganAda = true;
+  p.tangan = lm;
+  p.hadir = true;
+  p.segar = 0;
 
-  var telunjuk = lm[8], jempol = lm[4];
-  // jangkauan diperlebar dari titik tengah supaya sudut layar tetap terjangkau
-  target.x = jepit((1 - telunjuk.x - 0.5) * GAIN + 0.5, 0, 1) * W;
-  target.y = jepit((telunjuk.y - 0.5) * GAIN + 0.5, 0, 1) * H;
-  cursor.ada = true;
+  p.target.x = layarX(lm, p);
+  p.target.y = layarY(lm, p);
+  p.cursor.ada = true;
 
   // cubit diukur relatif ukuran telapak -> jauh/dekat kamera terasa sama
   var skala = Math.max(1e-4, jarak(lm[0], lm[9]));
-  var rasio = jarak(telunjuk, jempol) / skala;
-  var baru = cubit ? (rasio < CUBIT_OFF) : (rasio < CUBIT_ON);
+  var rasio = jarak(lm[8], lm[4]) / skala;
+  var baru = p.cubit ? (rasio < CUBIT_OFF) : (rasio < CUBIT_ON);
 
-  if (baru && !cubit){ ambil(); kalib.cubitOk = true; }
-  else if (!baru && cubit) lepas();
-  cubit = baru;
+  if (baru && !p.cubit){ ambil(p); kalib.cubitOk = true; }
+  else if (!baru && p.cubit) lepas(p);
+  p.cubit = baru;
+}
+
+function onResults(res){
+  var daftar = (res && res.multiHandLandmarks) ? res.multiHandLandmarks : [];
+  sejakFrame = 0;
+  var bagian = bagiTangan(daftar);
+  for (var i = 0; i < pemain.length; i++) perbaruiPemain(pemain[i], bagian[i]);
 }
 
 /* ============================================================
    M8 · Perbarui
    ============================================================ */
-/* `tanganAda` beku pada nilai terakhir kalau aliran frame kamera berhenti
+/* `p.tangan` beku pada nilai terakhir kalau aliran frame kamera berhenti
    (kamera dicabut, pipeline mati). Untuk urusan kios itu harus dibaca
    sebagai "tidak ada orang", bukan "tangan masih di situ" — kalau tidak,
    kursor yang kebetulan berhenti di atas tombol akan menekannya sendiri.
 
    Mode ?mouse=1 dikecualikan: di sana memang tidak ada aliran frame kamera
    yang bisa dipantau kesegarannya. */
-function adaOrang(){ return tanganAda && (pakaiMouse || sejakFrame < FRAME_MATI); }
+function adaOrangP(p){ return p.hadir && (pakaiMouse || p.segar < FRAME_MATI); }
 
 /* Menahan tombol selama satu detik hanya sah kalau datanya benar-benar
-   mengalir selama itu. `adaOrang()` terlalu longgar untuk ini — masa
+   mengalir selama itu. `adaOrangP()` terlalu longgar untuk ini — masa
    tenggangnya lebih panjang dari DWELL, jadi kamera beku masih sempat
    menyelesaikan satu tekanan. */
-function frameSegar(){ return pakaiMouse || sejakFrame < FRAME_SEGAR; }
+function frameSegarP(p){ return p.hadir && (pakaiMouse || p.segar < FRAME_SEGAR); }
+
+/* Untuk keputusan tingkat kios: cukup satu pemain terlihat. */
+function adaOrang(){
+  for (var i = 0; i < pemain.length; i++) if (adaOrangP(pemain[i])) return true;
+  return false;
+}
+
+/* Dwell untuk seorang pemain. Tombol yang bertuan hanya menanggapi kursor
+   tuannya, jadi seorang anak tidak bisa menekan tombol di belahan lawan. */
+function dwell(p, dt){
+  if (!frameSegarP(p) || p.digenggam || p.cubit){ p.hoverId = null; p.hoverT = 0; return null; }
+
+  var atas = null;
+  for (var i = 0; i < tombol.length; i++){
+    var b = tombol[i];
+    if (b.tuan && b.tuan !== p) continue;
+    if (p.cursor.x > b.x && p.cursor.x < b.x + b.w &&
+        p.cursor.y > b.y && p.cursor.y < b.y + b.h){ atas = b; break; }
+  }
+  if (!atas){ p.hoverId = null; p.hoverT = 0; return null; }
+
+  if (atas.id !== p.hoverId){ p.hoverId = atas.id; p.hoverT = 0; bunyi(520, 0.05, 'sine', 0.03); }
+  p.hoverT += dt;
+  if (p.hoverT < DWELL) return null;
+
+  p.hoverId = null; p.hoverT = 0;
+  bunyi(880, 0.1);
+  return atas;
+}
 
 function perbarui(dt){
   waktu += dt;
   sejakFrame += dt;
 
-  if (cursor.ada){
-    var d = Math.hypot(target.x - cursor.x, target.y - cursor.y);
-    var a = Math.min(0.75, 0.22 + d / 260);     // gesit saat jauh, tenang saat hampir diam
-    cursor.x += (target.x - cursor.x) * a;
-    cursor.y += (target.y - cursor.y) * a;
-  }
+  var i, p;
+  for (i = 0; i < pemain.length; i++){
+    p = pemain[i];
+    p.segar += dt;
 
-  if (digenggam){
-    if (layar !== 'main') digenggam = null;
-    else {
-      digenggam.x = cursor.x - papan.cell / 2;
-      digenggam.y = cursor.y - papan.cell / 2;
+    if (p.cursor.ada){
+      var d = Math.hypot(p.target.x - p.cursor.x, p.target.y - p.cursor.y);
+      var a = Math.min(0.75, 0.22 + d / 260);   // gesit saat jauh, tenang saat hampir diam
+      p.cursor.x += (p.target.x - p.cursor.x) * a;
+      p.cursor.y += (p.target.y - p.cursor.y) * a;
     }
-  }
 
-  // dwell click
-  if (tanganAda && frameSegar() && !digenggam && !cubit){
-    var atas = null;
-    for (var i = 0; i < tombol.length; i++){
-      var b = tombol[i];
-      if (cursor.x > b.x && cursor.x < b.x + b.w && cursor.y > b.y && cursor.y < b.y + b.h){ atas = b; break; }
-    }
-    if (atas){
-      if (atas.id !== hoverId){ hoverId = atas.id; hoverT = 0; bunyi(520, 0.05, 'sine', 0.03); }
-      hoverT += dt;
-      if (hoverT >= DWELL){
-        hoverId = null; hoverT = 0;
-        bunyi(880, 0.1);
-        atas.aksi();
-        return;                                  // aksi bisa mengganti layar
+    if (p.digenggam){
+      if (layar !== 'main') p.digenggam = null;
+      else {
+        p.digenggam.x = p.cursor.x - p.papan.cell / 2;
+        p.digenggam.y = p.cursor.y - p.papan.cell / 2;
       }
-    } else { hoverId = null; hoverT = 0; }
-  } else { hoverId = null; hoverT = 0; }
+    }
+
+    var ditekan = dwell(p, dt);
+    if (ditekan){ ditekan.aksi(); return; }     // aksi bisa mengganti layar
+  }
 
   if (layar === 'kalibrasi'){
-    if (tanganAda && frameSegar()) kalib.lihat += dt;
+    if (frameSegarP(pemain[0])) kalib.lihat += dt;
     if (kalib.lihat > 700 && kalib.cubitOk){
       kalib.selesai += dt;
       if (kalib.selesai > 900){ tandaiKalibrasi(); keMenu(); }
@@ -614,15 +799,18 @@ function perbarui(dt){
   }
 
   if (layar === 'main'){
-    tanpaProgres += dt;
-    if (!petunjuk && tanpaProgres > JEDA_PETUNJUK){
-      for (var k = 0; k < keping.length; k++){
-        if (!keping[k].pas){ petunjuk = { p:keping[k], t:2600 }; break; }
+    for (i = 0; i < pemain.length; i++){
+      p = pemain[i];
+      p.tanpaProgres += dt;
+      if (!p.petunjuk && p.tanpaProgres > JEDA_PETUNJUK){
+        for (var k = 0; k < p.keping.length; k++){
+          if (!p.keping[k].pas){ p.petunjuk = { p:p.keping[k], t:2600 }; break; }
+        }
       }
-    }
-    if (petunjuk){
-      petunjuk.t -= dt;
-      if (petunjuk.t <= 0){ petunjuk = null; tanpaProgres = 0; }
+      if (p.petunjuk){
+        p.petunjuk.t -= dt;
+        if (p.petunjuk.t <= 0){ p.petunjuk = null; p.tanpaProgres = 0; }
+      }
     }
   }
 
@@ -635,10 +823,13 @@ function perbarui(dt){
     diam = 0;
   }
 
-  for (var j = 0; j < keping.length; j++){
-    var p = keping[j];
-    if (p.anim){ p.anim.t += dt; if (p.anim.t >= p.anim.dur) p.anim = null; }
-    if (p.denyut > 0) p.denyut = Math.max(0, p.denyut - dt / 420);
+  for (i = 0; i < pemain.length; i++){
+    var daftar = pemain[i].keping;
+    for (var j = 0; j < daftar.length; j++){
+      var kp = daftar[j];
+      if (kp.anim){ kp.anim.t += dt; if (kp.anim.t >= kp.anim.dur) kp.anim = null; }
+      if (kp.denyut > 0) kp.denyut = Math.max(0, kp.denyut - dt / 420);
+    }
   }
 
   majukanPartikel(konfeti, dt, 620, H + 40);
@@ -778,9 +969,21 @@ function petakMini(x, y, ukuran, n, warna, alpha){
   ctx.restore();
 }
 
+/* Tombol bertuan hanya menyala untuk tuannya; tombol bersama menyala untuk
+   siapa pun yang sedang menahannya. */
+function pemainHover(b){
+  for (var i = 0; i < pemain.length; i++){
+    var p = pemain[i];
+    if (b.tuan && b.tuan !== p) continue;
+    if (p.hoverId === b.id && p.hoverT > 0) return p;
+  }
+  return null;
+}
+
 function gambarTombol(b){
-  var aktif = b.id === hoverId;
-  var p = aktif ? Math.min(1, hoverT / DWELL) : 0;
+  var ph = pemainHover(b);
+  var aktif = !!ph;
+  var p = aktif ? Math.min(1, ph.hoverT / DWELL) : 0;
   var naik = aktif ? 3 : 0;
   var x = b.x, y = b.y - naik, w = b.w, h = b.h;
   var r = b.gaya === 'kartu' ? 26 : 20;
@@ -836,8 +1039,8 @@ function gambarTombol(b){
 /* ============================================================
    M10 · Papan & kepingan
    ============================================================ */
-function gambarPapan(){
-  var x = papan.x, y = papan.y, s = papan.s, cell = papan.cell;
+function gambarPapan(pm){
+  var x = pm.papan.x, y = pm.papan.y, s = pm.papan.s, cell = pm.papan.cell;
 
   ctx.save();
   bulat(x - 8, y - 8, s + 16, s + 16, 28);
@@ -869,19 +1072,20 @@ function gambarPapan(){
   ctx.stroke();
   ctx.restore();
 
-  if (digenggam) sorotSlot(digenggam,
-    Math.hypot(digenggam.x - (x + digenggam.col*cell), digenggam.y - (y + digenggam.row*cell)) < cell * SNAP
+  var g = pm.digenggam;
+  if (g) sorotSlot(pm, g,
+    Math.hypot(g.x - (x + g.col*cell), g.y - (y + g.row*cell)) < cell * SNAP
       ? '#35E0A1' : 'rgba(255,255,255,.45)', 1);
 
-  if (petunjuk && petunjuk.p && !petunjuk.p.pas){
+  if (pm.petunjuk && pm.petunjuk.p && !pm.petunjuk.p.pas){
     var kedip = 0.45 + 0.55 * Math.abs(Math.sin(waktu / 260));
-    sorotSlot(petunjuk.p, '#FFB020', kedip);
+    sorotSlot(pm, pm.petunjuk.p, '#FFB020', kedip);
   }
 }
 
-function sorotSlot(p, warna, alpha){
-  var c = papan.cell;
-  var tx = papan.x + p.col * c, ty = papan.y + p.row * c;
+function sorotSlot(pm, kp, warna, alpha){
+  var c = pm.papan.cell;
+  var tx = pm.papan.x + kp.col * c, ty = pm.papan.y + kp.row * c;
   ctx.save();
   ctx.globalAlpha = alpha;
   bulat(tx + 4, ty + 4, c - 8, c - 8, 12);
@@ -892,18 +1096,18 @@ function sorotSlot(p, warna, alpha){
   ctx.restore();
 }
 
-function gambarKeping(p, diangkat){
+function gambarKeping(pm, kp, diangkat){
   if (!foto) return;
-  var c = papan.cell, sc = SRC / GRID;
-  var px = p.x, py = p.y, skala = 1;
+  var c = pm.papan.cell, sc = SRC / GRID;
+  var px = kp.x, py = kp.y, skala = 1;
 
-  if (p.anim){
-    var k = mulus(p.anim.t / p.anim.dur);
-    px = p.anim.x0 + (p.x - p.anim.x0) * k;
-    py = p.anim.y0 + (p.y - p.anim.y0) * k;
+  if (kp.anim){
+    var k = mulus(kp.anim.t / kp.anim.dur);
+    px = kp.anim.x0 + (kp.x - kp.anim.x0) * k;
+    py = kp.anim.y0 + (kp.y - kp.anim.y0) * k;
   }
   if (diangkat) skala = 1.07;
-  else if (p.denyut > 0) skala = 1 + 0.10 * Math.sin(p.denyut * Math.PI);
+  else if (kp.denyut > 0) skala = 1 + 0.10 * Math.sin(kp.denyut * Math.PI);
 
   ctx.save();
   ctx.translate(px + c/2, py + c/2);
@@ -917,10 +1121,12 @@ function gambarKeping(p, diangkat){
   }
   bulat(0, 0, c, c, 11);
   ctx.save(); ctx.clip();
-  ctx.drawImage(foto, p.col * sc, p.row * sc, sc, sc, 0, 0, c, c);
+  ctx.drawImage(foto, kp.col * sc, kp.row * sc, sc, sc, 0, 0, c, c);
   ctx.restore();
-  ctx.lineWidth = p.pas ? 3 : 2.5;
-  ctx.strokeStyle = p.pas ? 'rgba(53,224,161,.95)' : 'rgba(255,255,255,.8)';
+  ctx.lineWidth = kp.pas ? 3 : 2.5;
+  // Kepingan yang sudah pas diberi warna pemiliknya, supaya di versus jelas
+  // papan siapa yang sedang terisi.
+  ctx.strokeStyle = kp.pas ? pm.warnaPas : 'rgba(255,255,255,.8)';
   ctx.stroke();
   ctx.restore();
 }
@@ -942,36 +1148,37 @@ function kotakKamera(){
   return { x:W - w - 16, y:16, w:w, h:w * 0.75 };
 }
 
-function gambarKursor(){
-  if (!cursor.ada || !adaOrang()) return;   // kamera mati -> kursor ikut hilang
-  var r = cubit ? 14 : 23;
-  var warna = cubit ? '#35E0A1' : '#FFB020';
+function gambarKursor(pm){
+  if (!pm.cursor.ada || !adaOrangP(pm)) return;  // kamera mati -> kursor ikut hilang
+  var cx = pm.cursor.x, cy = pm.cursor.y;
+  var r = pm.cubit ? 14 : 23;
+  var warna = pm.cubit ? '#35E0A1' : pm.warna;
 
   ctx.save();
-  ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r + 7, 0, Math.PI*2);
+  ctx.beginPath(); ctx.arc(cx, cy, r + 7, 0, Math.PI*2);
   ctx.fillStyle = 'rgba(0,0,0,.22)'; ctx.fill();
 
-  ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r, 0, Math.PI*2);
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
   ctx.lineWidth = 3;
   ctx.strokeStyle = 'rgba(255,255,255,.35)';
   ctx.stroke();
 
-  if (hoverId && hoverT > 0){                    // cincin dwell mengelilingi kursor
-    var p = Math.min(1, hoverT / DWELL);
+  if (pm.hoverId && pm.hoverT > 0){               // cincin dwell mengelilingi kursor
+    var maju = Math.min(1, pm.hoverT / DWELL);
     ctx.beginPath();
-    ctx.arc(cursor.x, cursor.y, r + 4, -Math.PI/2, -Math.PI/2 + p * Math.PI * 2);
+    ctx.arc(cx, cy, r + 4, -Math.PI/2, -Math.PI/2 + maju * Math.PI * 2);
     ctx.lineWidth = 6;
     ctx.lineCap = 'round';
     ctx.strokeStyle = warna;
     ctx.stroke();
   } else {
-    ctx.beginPath(); ctx.arc(cursor.x, cursor.y, r, 0, Math.PI*2);
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2);
     ctx.lineWidth = 4;
     ctx.strokeStyle = warna;
     ctx.stroke();
   }
 
-  ctx.beginPath(); ctx.arc(cursor.x, cursor.y, 4.5, 0, Math.PI*2);
+  ctx.beginPath(); ctx.arc(cx, cy, 4.5, 0, Math.PI*2);
   ctx.fillStyle = '#fff'; ctx.fill();
   ctx.restore();
 }
@@ -995,25 +1202,29 @@ function gambarKamera(x, y, w, h, label){
       ctx.globalAlpha = 1;
     } catch (e){ /* frame belum siap */ }
   }
-  if (landmark){
-    ctx.strokeStyle = cubit ? '#35E0A1' : '#FFB020';
+  // Rangka semua tangan yang sedang dipakai, diwarnai pemiliknya — di versus
+  // itulah cara anak memastikan kamera benar-benar mengenali tangannya.
+  for (var q = 0; q < pemain.length; q++){
+    var pm = pemain[q], lm = pm.tangan;
+    if (!lm) continue;
+    ctx.strokeStyle = pm.cubit ? '#35E0A1' : pm.warna;
     ctx.lineWidth = Math.max(2, w / 70);
     for (var i = 0; i < SAMBUNG.length; i++){
-      var a = landmark[SAMBUNG[i][0]], b = landmark[SAMBUNG[i][1]];
+      var a = lm[SAMBUNG[i][0]], b = lm[SAMBUNG[i][1]];
       ctx.beginPath();
       ctx.moveTo(a.x * w, a.y * h); ctx.lineTo(b.x * w, b.y * h);
       ctx.stroke();
     }
     ctx.fillStyle = '#fff';
-    for (var j = 0; j < landmark.length; j++){
-      ctx.beginPath(); ctx.arc(landmark[j].x * w, landmark[j].y * h, Math.max(2, w/60), 0, Math.PI*2); ctx.fill();
+    for (var j = 0; j < lm.length; j++){
+      ctx.beginPath(); ctx.arc(lm[j].x * w, lm[j].y * h, Math.max(2, w/60), 0, Math.PI*2); ctx.fill();
     }
   }
   ctx.restore();
 
   ctx.save();
   bulat(x, y, w, h, r);
-  ctx.strokeStyle = tanganAda ? 'rgba(53,224,161,.6)' : 'rgba(255,255,255,.2)';
+  ctx.strokeStyle = adaOrang() ? 'rgba(53,224,161,.6)' : 'rgba(255,255,255,.2)';
   ctx.lineWidth = 2; ctx.stroke();
   ctx.restore();
 
@@ -1055,7 +1266,7 @@ function gambarMenu(){
        W/2, yJudul + judul * 0.62, Math.min(20, W * 0.042), 500, 'rgba(255,255,255,.55)');
 
   var yPetunjuk = Math.min(H - 54, rakMenu.y + rakMenu.h + 34);
-  if (kamSiap && !tanganAda){
+  if (kamSiap && !adaOrang()){
     var w = Math.min(420, W - 44), x = (W - w)/2, y = yPetunjuk - 20;
     ctx.save();
     bulat(x, y, w, 46, 16);
@@ -1094,36 +1305,51 @@ function gambarMundur(){
 
 /* Rata kiri, bukan di tengah: pratinjau kamera memakai pojok kanan-atas
    dan di lebar HP (<= ~420px) bilah yang di-tengah selalu tertimpa. */
-function bilahKotak(){
-  var x = 16, y = 62, h = 9;
-  return { x:x, y:y, h:h, w:Math.max(72, Math.min(280, kotakKamera().x - 14 - x)) };
+function bilahKotak(pm){
+  var k = pm.kotak;
+  var x = k.x + 16, y = k.y + 62, h = 9;
+  // Hanya belahan paling kanan yang perlu menghindari pratinjau kamera:
+  // kotaknya di pojok kanan-atas layar, bukan di pojok tiap belahan.
+  var batasKanan = (pm.sisi === pemain.length - 1)
+    ? kotakKamera().x - 14
+    : k.x + k.w - 14;
+  return { x:x, y:y, h:h, w:Math.max(72, Math.min(280, batasKanan - x)) };
 }
 
-function gambarBilah(selesai, jumlah){
-  var k = bilahKotak(), x = k.x, y = k.y, w = k.w, h = k.h;
+function gambarBilah(pm, selesai, jumlah){
+  var k = bilahKotak(pm), x = k.x, y = k.y, w = k.w, h = k.h;
   ctx.save();
   bulat(x, y, w, h, 99);
   ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
   if (selesai > 0 && jumlah > 0){
     bulat(x, y, Math.max(h, w * (selesai / jumlah)), h, 99);
-    ctx.fillStyle = '#35E0A1'; ctx.fill();
+    ctx.fillStyle = pm.warnaPas; ctx.fill();
   }
   ctx.restore();
-  teks(selesai + ' / ' + jumlah, x, 34, 25, 700, '#fff', 'left');
+  var label = (pemain.length > 1 ? pm.nama + '  ' : '') + selesai + ' / ' + jumlah;
+  teksMuat(label, x, pm.kotak.y + 34, 25, 700, '#fff', 'left', w);
 }
 
 function gambarMain(){
-  gambarPapan();
-  var i, selesai = 0;
-  for (i = 0; i < keping.length; i++) if (keping[i].pas) selesai++;
-  for (i = 0; i < keping.length; i++) if (keping[i].pas && keping[i] !== digenggam) gambarKeping(keping[i], false);
-  for (i = 0; i < keping.length; i++) if (!keping[i].pas && keping[i] !== digenggam) gambarKeping(keping[i], false);
-  if (digenggam) gambarKeping(digenggam, true);
+  var adaPetunjuk = false;
+  for (var q = 0; q < pemain.length; q++){
+    var pm = pemain[q], i, selesai = 0;
+    if (pm.petunjuk) adaPetunjuk = true;
 
-  gambarBilah(selesai, keping.length);
-  var ket = petunjuk ? 'Lihat kotak yang berkedip — kepingan itu tempatnya di situ' : pesan;
+    gambarPapan(pm);
+    for (i = 0; i < pm.keping.length; i++) if (pm.keping[i].pas) selesai++;
+    for (i = 0; i < pm.keping.length; i++)
+      if (pm.keping[i].pas && pm.keping[i] !== pm.digenggam) gambarKeping(pm, pm.keping[i], false);
+    for (i = 0; i < pm.keping.length; i++)
+      if (!pm.keping[i].pas && pm.keping[i] !== pm.digenggam) gambarKeping(pm, pm.keping[i], false);
+    if (pm.digenggam) gambarKeping(pm, pm.digenggam, true);
+
+    gambarBilah(pm, selesai, pm.keping.length);
+  }
+
+  var ket = adaPetunjuk ? 'Lihat kotak yang berkedip — kepingan itu tempatnya di situ' : pesan;
   teks(ket, W/2, H - 96, Math.min(15, W * 0.033), 500,
-       petunjuk ? '#FFB020' : 'rgba(255,255,255,.45)');
+       adaPetunjuk ? '#FFB020' : 'rgba(255,255,255,.45)');
 }
 
 function bintang(x, y, r, warna){
@@ -1140,8 +1366,11 @@ function bintang(x, y, r, warna){
 }
 
 function gambarMenang(){
-  gambarPapan();
-  for (var i = 0; i < keping.length; i++) gambarKeping(keping[i], false);
+  for (var q = 0; q < pemain.length; q++){
+    var pm = pemain[q];
+    gambarPapan(pm);
+    for (var i = 0; i < pm.keping.length; i++) gambarKeping(pm, pm.keping[i], false);
+  }
   ctx.fillStyle = 'rgba(20,10,56,.74)';
   ctx.fillRect(0, 0, W, H);
 
@@ -1213,7 +1442,7 @@ function gambar(){
     if (kamSiap) gambarKamera(k.x, k.y, k.w, k.h, null);
   }
   gambarSiagaIdle();
-  gambarKursor();
+  for (var q = 0; q < pemain.length; q++) gambarKursor(pemain[q]);
 }
 
 /* Kios tanpa penunggu: satu galat sesaat ditelan, tapi galat yang terus
@@ -1285,13 +1514,22 @@ function bunyi(freq, dur, tipe, vol){
    ============================================================ */
 if (pakaiMouse){
   window.addEventListener('mousemove', function(e){
-    if (landmark) return;
-    cursor.ada = true; tanganAda = true;
-    target.x = cursor.x = e.clientX;
-    target.y = cursor.y = e.clientY;
+    var p = pemain[0];
+    if (p.tangan) return;
+    p.cursor.ada = true;
+    p.hadir = true;
+    p.segar = 0;
+    p.target.x = p.cursor.x = e.clientX;
+    p.target.y = p.cursor.y = e.clientY;
   });
-  window.addEventListener('mousedown', function(){ if (!landmark){ cubit = true;  ambil(); } });
-  window.addEventListener('mouseup',   function(){ if (!landmark){ cubit = false; lepas(); } });
+  window.addEventListener('mousedown', function(){
+    var p = pemain[0];
+    if (!p.tangan){ p.cubit = true;  ambil(p); }
+  });
+  window.addEventListener('mouseup',   function(){
+    var p = pemain[0];
+    if (!p.tangan){ p.cubit = false; lepas(p); }
+  });
 }
 
 /* Satu-satunya cara staf hotel mengembalikan permainan tanpa gestur tangan.
@@ -1507,8 +1745,12 @@ if (location.protocol === 'file:'){
   }
 
   ukur();
-  cursor.x = target.x = W / 2;
-  cursor.y = target.y = H / 2;
+  // Tiap kursor mulai di tengah belahannya sendiri, bukan di tengah layar.
+  for (var q = 0; q < pemain.length; q++){
+    var pq = pemain[q], kq = pq.kotak;
+    pq.cursor.x = pq.target.x = kq.x + kq.w / 2;
+    pq.cursor.y = pq.target.y = kq.y + kq.h / 2;
+  }
   lastT = performance.now();
   requestAnimationFrame(loop);
 

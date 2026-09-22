@@ -66,6 +66,9 @@ vm.createContext(sandbox);
 vm.runInContext(js,sandbox,{filename:'game.js'});
 
 const g=sandbox;
+/* Pemain ke-i. Mode solo hanya punya satu, jadi P() tanpa argumen menunjuk
+   satu-satunya pemain — itulah yang dipakai seluruh uji lama. */
+function P(i){ return g.pemain[i||0]; }
 // fx,fy = posisi layar 0..1 -> dibalik melewati GAIN supaya kursor mendarat tepat
 function hand(fx,fy,pinch){
   const ix=Math.min(1,Math.max(0,(fx-0.5)/1.30+0.5));
@@ -83,9 +86,9 @@ function hover(btnId,ms){
   const b=g.tombol.find(x=>x.id===btnId);
   assert(b,'tombol tidak ada: '+btnId);
   const cx=(b.x+b.w/2)/g.W, cy=(b.y+b.h/2)/g.H;
-  for(let i=0;i<40 && g.hoverT<g.DWELL;i++){ g.onResults(hand(cx,cy,false)); frames(1,60); }
+  for(let i=0;i<40 && P().hoverT<g.DWELL;i++){ g.onResults(hand(cx,cy,false)); frames(1,60); }
   // pastikan kursor sudah menempel
-  for(let i=0;i<30;i++){ g.onResults(hand(cx,cy,false)); frames(1,60); if(g.layar!=='main'&&g.hoverId===null&&g.hoverT===0) break; }
+  for(let i=0;i<30;i++){ g.onResults(hand(cx,cy,false)); frames(1,60); if(g.layar!=='main'&&P().hoverId===null&&P().hoverT===0) break; }
 }
 
 let lolos=0, gagal=0;
@@ -98,9 +101,9 @@ ukuran.forEach(([w,h])=>{
   t(w+'x'+h,()=>{
     g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
     ['mudah','sedang','sulit'].forEach(lv=>{
-      g.tingkat=lv; g.GRID=g.TINGKAT[lv].grid; g.hitungPapan();
-      assert(g.papan.s>0 && isFinite(g.papan.cell),'papan tidak valid');
-      g.zonaSebar.forEach(z=>assert(z.w>0&&z.h>0&&isFinite(z.x)&&isFinite(z.y),'zona sebar tidak valid'));
+      g.tingkat=lv; g.GRID=g.TINGKAT[lv].grid; g.hitungBelahan();
+      assert(P().papan.s>0 && isFinite(P().papan.cell),'papan tidak valid');
+      P().zonaSebar.forEach(z=>assert(z.w>0&&z.h>0&&isFinite(z.x)&&isFinite(z.y),'zona sebar tidak valid'));
       // semua tombol harus di dalam layar
       ['kalibrasi','menu','main','menang'].forEach(l=>{
         g.layar=l; g.susunTombol();
@@ -122,20 +125,20 @@ t('alur penuh',()=>{
   assert(g.layar==='mundur','harus masuk hitung mundur, dapat '+g.layar);
   for(let i=0;i<300 && g.layar==='mundur';i++) frames(1,32);
   assert(g.layar==='main','harus masuk permainan, dapat '+g.layar);
-  assert(g.keping.length===4,'harus 4 kepingan');
+  assert(P().keping.length===4,'harus 4 kepingan');
 
   // susun semua kepingan dengan cubit
   for(let n=0;n<4;n++){
-    const p=g.keping.find(q=>!q.pas);
-    const px=(p.x+g.papan.cell/2)/g.W, py=(p.y+g.papan.cell/2)/g.H;
+    const p=P().keping.find(q=>!q.pas);
+    const px=(p.x+P().papan.cell/2)/g.W, py=(p.y+P().papan.cell/2)/g.H;
     g.onResults(hand(px,py,false));
     for(let i=0;i<20;i++){ g.onResults(hand(px,py,false)); frames(1,16); }
     g.onResults(hand(px,py,true));              // cubit
     // kepingan bisa saling menumpuk; ambil yang benar-benar tergenggam
-    const q=g.digenggam;
+    const q=P().digenggam;
     assert(q,'tidak ada kepingan yang terambil pada langkah '+n);
-    const tx=(q.col*g.papan.cell+g.papan.x+g.papan.cell/2)/g.W;
-    const ty=(q.row*g.papan.cell+g.papan.y+g.papan.cell/2)/g.H;
+    const tx=(q.col*P().papan.cell+P().papan.x+P().papan.cell/2)/g.W;
+    const ty=(q.row*P().papan.cell+P().papan.y+P().papan.cell/2)/g.H;
     for(let i=0;i<40;i++){ g.onResults(hand(tx,ty,true)); frames(1,16); }
     g.onResults(hand(tx,ty,false));             // buka tangan
     assert(q.pas,'kepingan '+n+' tidak menempel');
@@ -148,23 +151,23 @@ console.log('— uji kasus tepi —');
 t('tangan hilang saat menggenggam',()=>{
   g.keMenu(); hover('lv-sedang');
   for(let i=0;i<300 && g.layar==='mundur';i++) frames(1,32);
-  const p=g.keping[0];
-  const px=(p.x+g.papan.cell/2)/g.W, py=(p.y+g.papan.cell/2)/g.H;
+  const p=P().keping[0];
+  const px=(p.x+P().papan.cell/2)/g.W, py=(p.y+P().papan.cell/2)/g.H;
   for(let i=0;i<20;i++){ g.onResults(hand(px,py,false)); frames(1,16); }
   g.onResults(hand(px,py,true));
-  assert(g.digenggam,'belum menggenggam');
+  assert(P().digenggam,'belum menggenggam');
   g.onResults({multiHandLandmarks:[]});         // tangan keluar frame
-  assert(!g.digenggam,'kepingan harus dilepas saat tangan hilang');
-  assert(!g.cubit,'status cubit harus mati');
+  assert(!P().digenggam,'kepingan harus dilepas saat tangan hilang');
+  assert(!P().cubit,'status cubit harus mati');
   frames(10,16);
 });
 t('resize saat bermain tidak mengacak & kepingan tetap di area',()=>{
-  const sebelum=g.keping.map(p=>({pas:p.pas}));
+  const sebelum=P().keping.map(p=>({pas:p.pas}));
   g.window.innerWidth=430; g.window.innerHeight=932; g.ukur();
-  g.keping.forEach((p,i)=>{
+  P().keping.forEach((p,i)=>{
     assert(p.pas===sebelum[i].pas,'status kepingan berubah saat resize');
-    assert(p.x>=-1 && p.x+g.papan.cell<=g.W+1,'kepingan keluar layar setelah resize');
-    assert(p.y>=-1 && p.y+g.papan.cell<=g.H+1,'kepingan keluar layar setelah resize');
+    assert(p.x>=-1 && p.x+P().papan.cell<=g.W+1,'kepingan keluar layar setelah resize');
+    assert(p.y>=-1 && p.y+P().papan.cell<=g.H+1,'kepingan keluar layar setelah resize');
   });
   frames(5,16);
 });
@@ -182,23 +185,23 @@ t('kamera belum siap saat hitung mundur',()=>{
   assert(g.layar==='main','harus lanjut begitu kamera siap');
 });
 t('tombol acak ulang saat bermain',()=>{
-  g.keping[0].pas=true;
-  g.acakKeping();
-  assert(g.keping.every(p=>!p.pas),'acak harus mengosongkan papan');
-  assert(g.digenggam===null,'genggaman harus dilepas');
+  P().keping[0].pas=true;
+  g.acakKeping(P());
+  assert(P().keping.every(p=>!p.pas),'acak harus mengosongkan papan');
+  assert(P().digenggam===null,'genggaman harus dilepas');
 });
 t('kepingan yang dilepas tidak menutupi tombol',()=>{
-  const p=g.keping[0];
-  p.x=g.W-10; p.y=g.H-10; g.digenggam=p; g.lepas();
+  const p=P().keping[0];
+  p.x=g.W-10; p.y=g.H-10; P().digenggam=p; g.lepas(P());
   const bawahTombol=Math.min.apply(null,g.tombol.map(b=>b.y));
-  assert(p.y+g.papan.cell<=bawahTombol+1,'kepingan menimpa baris tombol');
+  assert(p.y+P().papan.cell<=bawahTombol+1,'kepingan menimpa baris tombol');
 });
 t('dwell tidak aktif saat sedang mencubit',()=>{
   const b=g.tombol[0];
   const cx=(b.x+b.w/2)/g.W, cy=(b.y+b.h/2)/g.H;
   g.onResults(hand(cx,cy,true));
   frames(80,32);
-  assert(g.hoverT===0,'dwell harus mati saat mencubit');
+  assert(P().hoverT===0,'dwell harus mati saat mencubit');
 });
 t('layar ekstrem 320x360',()=>{
   g.window.innerWidth=320; g.window.innerHeight=360; g.ukur();
@@ -229,19 +232,19 @@ t('petunjuk muncul setelah diam lama, lalu hilang',()=>{
   assert(g.layar==='main');
   g.onResults({multiHandLandmarks:[]});
   frames(Math.ceil(g.JEDA_PETUNJUK/32)+6,32);
-  assert(g.petunjuk,'petunjuk tidak muncul setelah '+g.JEDA_PETUNJUK+'ms');
-  assert(g.petunjuk.p && !g.petunjuk.p.pas,'petunjuk menunjuk kepingan yang sudah pas');
+  assert(P().petunjuk,'petunjuk tidak muncul setelah '+g.JEDA_PETUNJUK+'ms');
+  assert(P().petunjuk.p && !P().petunjuk.p.pas,'petunjuk menunjuk kepingan yang sudah pas');
   frames(200,32);
-  assert(!g.petunjuk,'petunjuk tidak hilang');
+  assert(!P().petunjuk,'petunjuk tidak hilang');
 });
 t('animasi tempel & kilau selesai tanpa galat',()=>{
-  const p=g.keping.find(q=>!q.pas);
-  const px=(p.x+g.papan.cell/2)/g.W, py=(p.y+g.papan.cell/2)/g.H;
+  const p=P().keping.find(q=>!q.pas);
+  const px=(p.x+P().papan.cell/2)/g.W, py=(p.y+P().papan.cell/2)/g.H;
   for(let i=0;i<20;i++){ g.onResults(hand(px,py,false)); frames(1,16); }
   g.onResults(hand(px,py,true));
-  const q=g.digenggam; assert(q,'tidak ada kepingan yang terambil');
-  const tx=(g.papan.x+q.col*g.papan.cell+g.papan.cell/2)/g.W;
-  const ty=(g.papan.y+q.row*g.papan.cell+g.papan.cell/2)/g.H;
+  const q=P().digenggam; assert(q,'tidak ada kepingan yang terambil');
+  const tx=(P().papan.x+q.col*P().papan.cell+P().papan.cell/2)/g.W;
+  const ty=(P().papan.y+q.row*P().papan.cell+P().papan.cell/2)/g.H;
   for(let i=0;i<40;i++){ g.onResults(hand(tx,ty,true)); frames(1,16); }
   g.onResults(hand(tx,ty,false));
   assert(q.pas,'kepingan tidak menempel');
@@ -267,7 +270,7 @@ const sempit=[[320,360],[320,568],[360,640],[375,812],[390,844],[414,896],[430,9
 t('bilah kemajuan tidak tertimpa pratinjau kamera',()=>{
   sempit.forEach(([w,h])=>{
     g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
-    const kam=g.kotakKamera(), bil=g.bilahKotak();
+    const kam=g.kotakKamera(), bil=g.bilahKotak(P());
     const beririsan = bil.x+bil.w > kam.x && bil.y < kam.y+kam.h && bil.y+bil.h > kam.y;
     assert(!beririsan, w+'x'+h+': bilah berakhir di '+(bil.x+bil.w).toFixed(0)+
                       ' sedangkan kamera mulai di '+kam.x.toFixed(0));
@@ -291,9 +294,9 @@ t('kepingan hasil sebar tetap di dalam area main',()=>{
   sempit.forEach(([w,h])=>{
     g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
     ['mudah','sedang','sulit'].forEach(lv=>{
-      g.GRID=g.TINGKAT[lv].grid; g.hitungPapan(); g.buatKeping();
-      const c=g.papan.cell, a=g.areaMain;
-      g.keping.forEach((p,i)=>{
+      g.GRID=g.TINGKAT[lv].grid; g.hitungBelahan(); g.buatKeping(P());
+      const c=P().papan.cell, a=P().areaMain;
+      P().keping.forEach((p,i)=>{
         assert(p.x>=a.x-0.5 && p.x+c<=a.x+a.w+0.5,
                w+'x'+h+'/'+lv+': kepingan '+i+' keluar area main horizontal');
         assert(p.y>=a.y-0.5 && p.y+c<=a.y+a.h+0.5,
@@ -360,7 +363,7 @@ t('peringatan idle muncul, lalu batal saat orang kembali',()=>{
 t('aliran frame kamera mati dianggap tidak ada orang',()=>{
   keLayarMain();
   g.onResults(hand(0.5,0.5,false));                  // tangan terlihat…
-  assert(g.tanganAda===true,'tangan harusnya terdeteksi');
+  assert(P().hadir===true,'tangan harusnya terdeteksi');
   // …lalu pipeline kamera berhenti total: tidak ada onResults lagi sama sekali.
   // Tanpa penjaga sejakFrame, tanganAda beku di true dan kios tidak pernah pulang.
   // Anggarannya termasuk FRAME_MATI: hitungan idle baru mulai setelah itu.
@@ -381,7 +384,7 @@ t('kamera beku tidak boleh menekan tombol sendiri',()=>{
   // tombol — tanpa penjaga kesegaran, dwell akan menekannya sendiri.
   frames(Math.ceil((g.FRAME_MATI+g.DWELL)/16)+20,16);
   assert(g.layar==='main','tombol tertekan sendiri oleh kamera beku, layar jadi '+g.layar);
-  assert(g.hoverT===0,'dwell harus berhenti saat aliran frame mati, hoverT='+g.hoverT);
+  assert(P().hoverT===0,'dwell harus berhenti saat aliran frame mati, hoverT='+P().hoverT);
 });
 
 t('ketuk 3x pojok kiri-atas memaksa pulang ke menu',()=>{
