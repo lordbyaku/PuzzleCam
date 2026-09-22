@@ -72,6 +72,11 @@ Kalau salah satu gagal, tidak ada yang di-commit maupun dikirim — jadi tidak
 mungkin mengirim kode yang ujinya merah atau yang `VERSI` di `sw.js`-nya
 tertinggal.
 
+Ia mengikuti **branch yang sedang aktif**, bukan mematok `main`. Pekerjaan
+besar dikerjakan di branch supaya `main` — yang ter-deploy ke kios — selalu
+berisi versi yang sudah terverifikasi di perangkat asli. Branch yang belum
+ada di GitHub langsung dibuat oleh push pertama.
+
 `npm` hanya jadi pembungkus perintah — tidak ada satu pun dependensi,
 jadi `npm install` tidak pernah perlu dijalankan.
 
