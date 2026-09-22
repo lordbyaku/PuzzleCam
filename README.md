@@ -72,8 +72,8 @@ vercel --prod
 Folder `mediapipe/` **harus ikut ter-commit** — jangan masuk `.gitignore`.
 Kalau repo terasa berat, aktifkan Git LFS untuk `*.wasm`, `*.tflite`, `*.data`.
 
-Repo git berada satu tingkat di atas (`AIRTOUCH/`), jadi di Vercel set
-**Root Directory** ke `PuzzleCam` supaya `vercel.json` ikut terbaca.
+Akar repo ini sudah berisi `index.html` langsung, jadi **Root Directory di
+Vercel tidak perlu disetel** — biarkan default.
 
 ## Setelan yang sering diubah
 

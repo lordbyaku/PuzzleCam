@@ -1,0 +1,10 @@
+# Semua berkas teks disimpan dan di-checkout dengan LF.
+# Wajib: setup-mediapipe.sh akan gagal dijalankan bash bila ber-CRLF,
+# dan index.html di-parse ulang oleh test/harness.js.
+* text=auto eol=lf
+
+# Aset MediaPipe: biner, jangan disentuh konversi baris.
+*.wasm      binary
+*.tflite    binary
+*.data      binary
+*.binarypb  binary

@@ -233,9 +233,9 @@ vercel --prod
   berkas di `sw.js` ikut diubah.
 - `.vercelignore` menahan `DEV.md`, `changelog.md`, `README.md`, `test/`, dan
   `setup-aset.sh` supaya tidak bisa dibuka publik di situsnya.
-- Repo git ada di tingkat `AIRTOUCH/`, bukan di dalam `PuzzleCam/`, karena
-  arena ini akan menampung beberapa game (lihat bagian 7). Di Vercel, set
-  **Root Directory** ke `PuzzleCam` supaya `vercel.json` terbaca.
+- Akar repo ini sudah berisi `index.html` langsung, jadi **Root Directory di
+  Vercel tidak perlu disetel**. Tiap game air-touch punya repo sendiri; folder
+  `AIRTOUCH/` di disk cuma wadah dan bukan repo (lihat bagian 7).
 - `.gitattributes` memaksa LF. Tanpa itu, Git di Windows meng-checkout
   `setup-aset.sh` dengan CRLF dan bash menolak menjalankannya.
 
@@ -261,6 +261,14 @@ Yang bisa dipakai ulang tanpa perubahan:
 Yang game-specific hanya M5, M6, M10, dan fungsi gambar layarnya di M12.
 Saat memecah, ekspor tujuh modul di atas sebagai `airtouch.js` dan biarkan
 setiap game mendaftarkan `{ perbarui, gambar, susunTombol }` miliknya sendiri.
+
+**Satu game, satu repo.** Folder `AIRTOUCH/` di disk hanya wadah agar
+game-game bersebelahan saat dikerjakan; ia bukan repo dan tidak boleh
+dijadikan repo. Konsekuensinya, `airtouch.js` nanti tidak bisa sekadar
+di-`import` lintas folder — ia perlu repo sendiri dan disalin (atau dipasang
+sebagai submodule) ke tiap game. Itu harga yang dibayar untuk deploy Vercel
+yang sederhana: tiap repo langsung berisi `index.html` di akarnya, tanpa
+Root Directory yang bisa lupa disetel.
 
 ---
 

@@ -1,0 +1,25 @@
+# Dependensi & artefak alat bantu
+node_modules/
+.vercel/
+*.log
+
+# Sampah sistem
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# ============================================================
+#  JANGAN PERNAH menambahkan mediapipe/ atau font/ di sini.
+#  Keduanya aset yang di-host sendiri (24 MB + 33 KB) dan WAJIB
+#  ikut ter-commit supaya deploy tidak berakhir layar blank.
+#  Lihat DEV.md bagian 6.
+# ============================================================
+!mediapipe/
+!font/
+
+# Setelan Claude Code per-mesin (launch.json tetap ikut di-commit)
+.claude/settings.local.json
