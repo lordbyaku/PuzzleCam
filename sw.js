@@ -18,7 +18,7 @@
 
    Diuji oleh test/sw-harness.js, tanpa browser.
    ============================================================ */
-var VERSI = 'puzzleudara-v1.4.1';
+var VERSI = 'puzzleudara-v1.5.0';
 
 var ISI = [
   './',

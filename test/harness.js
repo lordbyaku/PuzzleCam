@@ -430,5 +430,222 @@ t('loop memuat ulang sekali, lalu menyerah dengan kartu bantuan',()=>{
   }
 });
 
+console.log('— uji mode versus: isolasi antar belahan —');
+
+/* Satu tangan di belahan kamera `sisi`, menunjuk ke (fx,fy) yang diukur
+   relatif terhadap BELAHAN pemain itu, bukan terhadap layar penuh. */
+function lmSisi(sisi,fx,fy,pinch){
+  const u=Math.min(1,Math.max(0,(fx-0.5)/1.30+0.5));
+  const iy=Math.min(1,Math.max(0,(fy-0.5)/1.30+0.5));
+  const xJari=u/2+sisi*0.5;
+  const xPgl=sisi*0.5+0.25;              // pergelangan di tengah belahannya
+  const lm=[];
+  for(let i=0;i<21;i++) lm.push({x:0.5,y:0.5,z:0});
+  lm[0]={x:1-xPgl,y:0.7};
+  lm[9]={x:1-xPgl,y:0.45};               // skala telapak 0.25
+  lm[8]={x:1-xJari,y:iy};
+  lm[4]=pinch?{x:1-xJari+0.005,y:iy+0.005}:{x:1-xJari+0.25,y:iy+0.2};
+  return lm;
+}
+function duaTangan(a,b){
+  const d=[]; if(a) d.push(a); if(b) d.push(b);
+  return {multiHandLandmarks:d};
+}
+function versusMain(w,h){
+  g.window.innerWidth=w||1280; g.window.innerHeight=h||800; g.ukur();
+  g.mode='solo'; g.gantiMode('versus');
+  g.keMenu();
+  g.tingkat='mudah'; g.GRID=2; g.hitungBelahan();
+  g.foto=g.document.createElement('canvas');
+  for(let i=0;i<g.pemain.length;i++) g.buatKeping(g.pemain[i]);
+  g.layar='main'; g.susunTombol();
+  assert(g.pemain.length===2,'mode versus harus punya dua pemain');
+  return g.pemain;
+}
+function tuju(pm,x,y){   // titik layar -> pecahan di dalam belahan pemain
+  return [(x-pm.kotak.x)/pm.kotak.w, (y-pm.kotak.y)/pm.kotak.h];
+}
+
+t('tangan di belahan kiri tidak menggerakkan pemain kanan',()=>{
+  versusMain();
+  const kanan=P(1), x0=kanan.cursor.x, y0=kanan.cursor.y;
+  for(let i=0;i<25;i++){ g.onResults(duaTangan(lmSisi(0,0.2,0.3,false),null)); frames(1,16); }
+  assert(Math.abs(kanan.cursor.x-x0)<0.01 && Math.abs(kanan.cursor.y-y0)<0.01,
+    'kursor pemain kanan bergeser padahal tangannya tidak ada');
+  assert(!kanan.hadir,'pemain kanan dianggap hadir padahal tangannya di belahan kiri');
+  assert(P(0).hadir && P(0).cursor.x < g.W/2,'pemain kiri tidak menerima tangannya');
+});
+
+t('kursor tiap pemain tidak pernah melewati garis tengah',()=>{
+  versusMain();
+  // keduanya mendorong sekuat tenaga ke arah garis tengah
+  for(let i=0;i<40;i++){
+    g.onResults(duaTangan(lmSisi(0,1.6,0.5,false), lmSisi(1,-0.6,0.5,false)));
+    frames(1,16);
+  }
+  assert(P(0).cursor.x<=g.W/2+0.5,'kursor kiri melewati garis tengah: '+P(0).cursor.x.toFixed(1));
+  assert(P(1).cursor.x>=g.W/2-0.5,'kursor kanan melewati garis tengah: '+P(1).cursor.x.toFixed(1));
+});
+
+t('cubit di garis tengah tidak mengambil kepingan lawan',()=>{
+  const [kiri,kanan]=versusMain();
+  const c=kiri.papan.cell, y=kiri.areaMain.y+40;
+  // dua kepingan milik pemain berbeda, berdempetan tepat di garis tengah
+  kiri.keping[0].x=g.W/2-c-2;  kiri.keping[0].y=y;
+  kanan.keping[0].x=g.W/2+2;   kanan.keping[0].y=y;
+  const [fx,fy]=tuju(kiri, kiri.keping[0].x+c/2, y+c/2);
+  for(let i=0;i<25;i++){ g.onResults(duaTangan(lmSisi(0,fx,fy,false),null)); frames(1,16); }
+  g.onResults(duaTangan(lmSisi(0,fx,fy,true),null));
+  assert(kiri.digenggam,'pemain kiri tidak berhasil mengambil kepingannya sendiri');
+  assert(kanan.keping.indexOf(kiri.digenggam)<0,'yang terambil justru kepingan lawan');
+  assert(kanan.digenggam===null,'pemain kanan ikut menggenggam');
+});
+
+t('kepingan lawan tidak terambil walau tepat di bawah kursor',()=>{
+  const [kiri,kanan]=versusMain();
+  const c=kiri.papan.cell;
+  // Uji yang sesungguhnya atas jaminan kepemilikan: kepingan KANAN ditaruh
+  // persis di bawah kursor pemain kiri, sementara kepingan kiri disingkirkan
+  // jauh. Kalau ambil() tidak terkurung ke pm.keping, pemain kiri akan
+  // menggenggam kepingan lawannya di sini.
+  const tx=kiri.kotak.x+kiri.kotak.w*0.5, ty=kiri.areaMain.y+60;
+  kiri.keping.forEach(k=>{
+    k.x=kiri.kotak.x+4;
+    k.y=kiri.areaMain.y+kiri.areaMain.h-c-4;
+  });
+  kanan.keping[0].x=tx-c/2; kanan.keping[0].y=ty-c/2;
+
+  const [fx,fy]=tuju(kiri,tx,ty);
+  for(let i=0;i<25;i++){ g.onResults(duaTangan(lmSisi(0,fx,fy,false),null)); frames(1,16); }
+  g.onResults(duaTangan(lmSisi(0,fx,fy,true),null));
+  assert(kiri.digenggam===null,
+    'pemain kiri menggenggam kepingan yang ada di bawah kursornya padahal milik lawan');
+  assert(kanan.digenggam===null,'kepingan kanan ikut tergenggam');
+});
+
+t('dua tangan di belahan yang sama hanya menggerakkan satu pemain',()=>{
+  versusMain();
+  const kanan=P(1), x0=kanan.cursor.x;
+  // satu anak memakai dua tangan sekaligus, keduanya di belahan kiri
+  for(let i=0;i<25;i++){
+    g.onResults(duaTangan(lmSisi(0,0.2,0.3,false), lmSisi(0,0.8,0.7,false)));
+    frames(1,16);
+  }
+  assert(P(0).hadir,'pemain kiri harus menerima salah satu tangan');
+  assert(!kanan.hadir,'satu anak berhasil menguasai dua papan');
+  assert(Math.abs(kanan.cursor.x-x0)<0.01,'kursor kanan ikut bergerak');
+});
+
+t('tombol Acak lagi bertuan dan hanya mengurus pemiliknya',()=>{
+  const [kiri,kanan]=versusMain();
+  const b=g.tombol.find(x=>x.id==='acak-0');
+  assert(b,'tombol acak-0 tidak ada di layar main versus');
+  assert(b.tuan===kiri,'tombol acak-0 harus bertuan pemain kiri');
+  assert(!g.tombol.some(x=>x.id==='menu'||x.id==='foto'),
+    'selama bertanding tidak boleh ada tombol keluar');
+
+  // kursor pemain kanan dipaksa menahan tombol milik kiri
+  kanan.hadir=true; kanan.cursor.ada=true;
+  kanan.cursor.x=kanan.target.x=b.x+b.w/2;
+  kanan.cursor.y=kanan.target.y=b.y+b.h/2;
+  for(let i=0;i<Math.ceil(g.DWELL/16)+25;i++){ kanan.segar=0; frames(1,16); }
+  assert(kanan.hoverId===null,'kursor lawan bisa menahan tombol bertuan');
+
+  // aksinya pun hanya menyentuh kepingan pemiliknya
+  kanan.keping[0].pas=true;
+  b.aksi();
+  assert(kanan.keping[0].pas===true,'Acak lagi milik kiri ikut mengacak kepingan kanan');
+  assert(kiri.keping.every(k=>!k.pas),'Acak lagi tidak mengacak kepingan pemiliknya');
+});
+
+t('tangan yang menyeberang saat menggenggam tidak berpindah pemain',()=>{
+  const [kiri,kanan]=versusMain();
+  const kp=kiri.keping[0], c=kiri.papan.cell;
+  const [fx,fy]=tuju(kiri, kp.x+c/2, kp.y+c/2);
+  for(let i=0;i<25;i++){ g.onResults(duaTangan(lmSisi(0,fx,fy,false),null)); frames(1,16); }
+  g.onResults(duaTangan(lmSisi(0,fx,fy,true),null));
+  assert(kiri.digenggam,'belum menggenggam sebelum menyeberang');
+
+  // pergelangan menyeberang sedikit melewati garis tengah, masih di dalam
+  // SISI_MARGIN — kendali harus bertahan di pemain kiri
+  const lm=lmSisi(0,0.95,fy,true);
+  const xPgl=0.5+g.SISI_MARGIN*0.5;
+  lm[0]={x:1-xPgl,y:0.7}; lm[9]={x:1-xPgl,y:0.45};
+  for(let i=0;i<12;i++){ g.onResults(duaTangan(lm,null)); frames(1,16); }
+  assert(kiri.digenggam,'genggaman lepas saat pergelangan menyeberang sedikit');
+  assert(!kanan.hadir,'tangan yang sedang menggenggam berpindah ke lawan');
+});
+
+console.log('— uji mode versus: permainan & tata letak —');
+
+t('yang lebih dulu selesai jadi pemenang, penyusul tidak menimpa',()=>{
+  const [kiri,kanan]=versusMain();
+  kanan.keping.forEach(k=>{ k.pas=true; });
+  g.cekMenang(kanan);
+  assert(g.layar==='menang','harus pindah ke layar menang');
+  assert(g.pemenang===kanan,'pemenangnya salah');
+  kiri.keping.forEach(k=>{ k.pas=true; });
+  g.cekMenang(kiri);
+  assert(g.pemenang===kanan,'pemenang tertimpa oleh yang menyusul');
+  g.gambar();
+});
+
+t('tata letak versus muat dan kedua papan tidak saling tindih',()=>{
+  [[1280,800],[1920,1080],[1024,600]].forEach(([w,h])=>{
+    const [kiri,kanan]=versusMain(w,h);
+    ['main','menang'].forEach(l=>{
+      g.layar=l; g.susunTombol();
+      g.tombol.forEach(b=>{
+        assert(b.x>=0 && b.x+b.w<=g.W+0.5, w+'x'+h+' '+l+'/'+b.id+' keluar layar horizontal');
+        assert(b.y>=0 && b.y+b.h<=g.H+0.5, w+'x'+h+' '+l+'/'+b.id+' keluar layar vertikal');
+      });
+    });
+    assert(kiri.papan.x+kiri.papan.s<=g.W/2+0.5, w+'x'+h+': papan kiri melewati garis tengah');
+    assert(kanan.papan.x>=g.W/2-0.5,            w+'x'+h+': papan kanan melewati garis tengah');
+    [kiri,kanan].forEach((pm,i)=>{
+      assert(pm.papan.s>=160, w+'x'+h+': papan pemain '+i+' terlalu kecil');
+      pm.zonaSebar.forEach(z=>{
+        assert(z.x>=pm.kotak.x-0.5 && z.x+z.w<=pm.kotak.x+pm.kotak.w+0.5,
+          w+'x'+h+': zona sebar pemain '+i+' keluar belahannya');
+      });
+      pm.keping.forEach((kp,j)=>{
+        assert(kp.x>=pm.kotak.x-0.5 && kp.x+pm.papan.cell<=pm.kotak.x+pm.kotak.w+0.5,
+          w+'x'+h+': kepingan '+j+' pemain '+i+' lahir di luar belahannya');
+      });
+    });
+  });
+});
+
+t('menu versus menyembunyikan 4x4 dan tidak muncul di potret',()=>{
+  g.window.innerWidth=1280; g.window.innerHeight=800; g.ukur();
+  g.mode='solo'; g.gantiMode('versus'); g.keMenu();
+  assert(g.tombol.some(b=>b.id==='lv-mudah') && g.tombol.some(b=>b.id==='lv-sedang'),
+    '2x2 dan 3x3 harus tersedia di versus');
+  assert(!g.tombol.some(b=>b.id==='lv-sulit'),'kartu Sulit tidak boleh muncul di versus');
+  assert(g.tombol.some(b=>b.id==='mode-versus'),'baris mode harus ada di lanskap');
+
+  // Potret: versus tidak ditawarkan sama sekali
+  g.window.innerWidth=390; g.window.innerHeight=844; g.ukur();
+  g.mode='solo'; g.keMenu();
+  assert(!g.tombol.some(b=>b.id==='mode-versus'),
+    'baris mode tidak boleh muncul di potret');
+  assert(g.tombol.some(b=>b.id==='lv-sulit'),'di solo potret, 4x4 harus tetap ada');
+});
+
+t('pulang-otomatis tetap jalan dengan dua pemain',()=>{
+  const [kiri,kanan]=versusMain();
+  // salah satu masih terlihat -> jangan pulang
+  for(let i=0;i<Math.ceil((g.IDLE_SIAGA+g.IDLE_PULANG)/50)+6;i++){
+    g.onResults(duaTangan(lmSisi(0,0.5,0.5,false),null));
+    frames(1,50);
+  }
+  assert(g.layar==='main','pulang padahal salah satu pemain masih terlihat');
+  // keduanya pergi
+  g.onResults(duaTangan(null,null));
+  frames(Math.ceil((g.FRAME_MATI+g.IDLE_SIAGA+g.IDLE_PULANG)/50)+8,50);
+  assert(g.layar==='menu','tidak pulang setelah kedua pemain pergi');
+  assert(g.foto===null,'foto tidak dihapus saat pulang');
+});
+
 console.log('\nhasil: '+lolos+' lolos, '+gagal+' gagal');
 process.exit(gagal?1:0);

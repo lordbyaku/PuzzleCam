@@ -64,12 +64,12 @@ Setiap blok di `index.html` diberi penanda `M<n>` pada komentarnya.
 | Modul | Isi | Kapan kamu menyentuhnya |
 | --- | --- | --- |
 | **M1** Elemen & setelan | Referensi DOM, tabel `TINGKAT`, semua konstanta tuning | Mengubah tingkat kesulitan, kepekaan gestur |
-| **M2** Keadaan | Semua variabel global. Satu-satunya sumber kebenaran | Menambah state baru |
+| **M2** Keadaan | Global permainan + array `pemain`. Semua keadaan per-pemain ada di objeknya masing-masing | Menambah state baru |
 | **M3** Tata letak | `ukur()`, `hitungPapan()`. Menghitung posisi papan, zona sebar, area main dari ukuran jendela | Mengubah proporsi layar |
 | **M4** Tombol dwell | `susunTombol()` per layar, `tbl()`, `kartuTingkat()` | Menambah/memindah tombol |
 | **M5** Alur permainan | `mulaiTingkat` → `mulaiMundur` → `jepret` → `buatKeping` → `cekMenang` | Mengubah urutan permainan |
 | **M6** Cubit | `ambil()` dan `lepas()`, termasuk logika snap | Mengubah cara kepingan diambil |
-| **M7** Pelacakan tangan | `onResults()`. Landmark → posisi kursor + deteksi cubit | Mengubah gestur |
+| **M7** Pelacakan tangan | `onResults()` → `bagiTangan()` → `perbaruiPemain()`. Pembagian tangan ke pemain ada di sini | Mengubah gestur atau aturan isolasi |
 | **M8** Perbarui | `perbarui(dt)`. Satu-satunya tempat state berubah per frame | Menambah logika waktu |
 | **M9** Primitif gambar | `bulat()`, `teks()`, `latar()`, `petakMini()`, `gambarTombol()` | Mengubah gaya visual |
 | **M10** Papan & kepingan | `gambarPapan()`, `gambarKeping()`, `sorotSlot()` | Mengubah tampilan puzzle |
@@ -131,6 +131,7 @@ saat frame drop. Kalau perlu animasi, simpan `{t, dur}` pada objeknya
 | `IDLE_PULANG` | 10000 ms | Peringatan terlalu cepat berlalu | — |
 | `FRAME_MATI` | 2000 ms | Kamera lambat dan sering dianggap mati | — |
 | `FRAME_SEGAR` | 400 ms | Dwell putus-putus di tablet lawas | — (**wajib tetap di bawah `DWELL`**) |
+| `SISI_MARGIN` | 0.06 | Genggaman lepas saat tangan mendekati garis tengah | Kendali tertukar di tengah seretan |
 | `KETUK_ZONA` | 96 px | Staf susah mengenai pojoknya | Anak tidak sengaja memicunya |
 | `KETUK_JEDA` | 1200 ms | Staf mengetuk terlalu pelan | — |
 | `BATAS_GALAT` | 60 frame | Kios terlalu sering muat ulang sendiri | — |
@@ -154,14 +155,14 @@ Dua berkas, dijalankan berurutan:
 
 | Berkas | Isi |
 | --- | --- |
-| `test/harness.js` | 32 skenario permainan di atas stub canvas/DOM |
+| `test/harness.js` | 43 skenario permainan di atas stub canvas/DOM |
 | `test/sw-harness.js` | 10 skenario `sw.js` di atas stub Cache API + fetch |
 
 Tidak butuh browser dan tidak butuh `npm install`. Skrip mengambil blok
 `<script>` terakhir dari `index.html`, menjalankannya di `vm` Node di atas
 stub canvas/DOM, lalu menyuntikkan landmark tangan palsu untuk meniru pemain.
 
-Cakupannya 32 skenario:
+Cakupannya 43 skenario:
 
 - tata letak di 8 ukuran layar × 3 tingkat × 4 layar — semua tombol wajib di dalam viewport
 - alur penuh menu → tingkat → hitung mundur → menyusun 4 kepingan → menang
@@ -182,6 +183,14 @@ Cakupannya 32 skenario:
 - kamera beku tidak menekan tombol sendiri
 - ketuk 3× pojok memaksa pulang; ketuk di luar pojok tidak
 - `loop()` memuat ulang sekali lalu menyerah dengan kartu bantuan
+- **versus, isolasi:** tangan kiri tidak menggerakkan pemain kanan; kursor
+  tidak melewati garis tengah; kepingan lawan tidak terambil walau tepat di
+  bawah kursor; dua tangan di belahan sama hanya menggerakkan satu pemain;
+  tombol bertuan menolak kursor lawan; tangan yang menyeberang saat
+  menggenggam tidak berpindah pemain
+- **versus, permainan:** yang lebih dulu selesai jadi pemenang dan penyusul
+  tidak menimpa; kedua papan muat dan tidak saling tindih; 4×4 disembunyikan
+  dan baris mode tidak muncul di potret; pulang-otomatis dengan dua pemain
 
 **Jalankan ini sebelum setiap commit.** Kalau kamu menambah tombol atau layar,
 tambahkan id-nya ke daftar layar di uji tata letak — itu yang paling sering

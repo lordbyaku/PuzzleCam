@@ -24,6 +24,51 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.5.0] — 2026-09-22
+
+### Ditambahkan
+- **Mode Versus: dua anak bertanding di satu layar.** Satu foto diambil
+  memuat keduanya, lalu masing-masing menyusun salinannya di belahan layarnya
+  sendiri. Yang lebih dulu selesai menang. Dipilih dari baris mode baru di
+  menu, dan hanya ditawarkan di lanskap — tangan kedua anak terpisah
+  kiri-kanan, jadi belahan layarnya pun harus kiri-kanan supaya pemetaannya
+  tidak membingungkan.
+- **Isolasi antar belahan, dijamin oleh struktur data.** Lima pagar, masing
+  masing punya ujinya sendiri, dan kelimanya sudah dibuktikan lewat uji
+  mutasi — pagarnya dicabut satu per satu dan uji-nya memang menangkap:
+  kepemilikan kepingan (`ambil()` hanya menelusuri kepingan pemiliknya),
+  kursor terjepit di belahannya, jangkauan kamera dipetakan per belahan,
+  satu pemain paling banyak satu tangan, dan tombol bertuan.
+- `SISI_MARGIN` — toleransi pergelangan melewati garis tengah, hanya selama
+  pemain itu sedang menggenggam, supaya seretan tidak terputus oleh getaran.
+- Sebelas uji versus baru (total 43 uji permainan, 53 dengan service worker).
+
+### Diubah
+- **Seluruh keadaan per-pemain pindah ke array `pemain`.** Kursor, cubit,
+  papan, zona sebar, kepingan, genggaman, dwell, dan petunjuk tidak lagi
+  variabel global tunggal. Mode solo adalah kasus N=1 dari kode yang sama,
+  jadi tiap perbaikan berlaku untuk kedua mode sekaligus.
+- `maxNumHands` naik dari 1 ke 2. Di mode solo, tangan yang dipakai adalah
+  yang terdekat dengan kursor sebelumnya — kebetulan memperbaiki perilaku
+  lama, ketika tangan orang tua yang ikut masuk bingkai bisa merebut kendali.
+- Selama pertandingan berlangsung **tidak ada tombol keluar**; tiap belahan
+  hanya punya "Acak lagi" miliknya sendiri. Kalau ada tombol keluar bersama,
+  anak yang kalah bisa membatalkan permainan lawannya sedetik sebelum lawannya
+  menang. Keluar lewat pulang-otomatis saat ditinggal atau ketukan staf.
+- 4×4 tetap khusus mode solo: di separuh layar kepingannya mengecil dan
+  toleransi tempel ikut mengecil.
+
+### Catatan
+- Perilaku mode solo tidak berubah sama sekali. Gerbangnya dibuktikan, bukan
+  diklaim: harness lama yang diberi rename mekanis menghasilkan berkas yang
+  identik dengan harness baru, jadi tidak ada harapan uji yang dilonggarkan.
+- Dua penyimpangan warna sempat lolos dari uji dan hanya ketahuan dari layar,
+  karena stub harness tidak memeriksa warna. Warna kursor dan warna kemajuan
+  ternyata dua hal berbeda di solo, jadi pemain kini membawa `warna` dan
+  `warnaPas` terpisah.
+
+---
+
 ## [1.4.1] — 2026-09-22
 
 ### Diperbaiki

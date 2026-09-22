@@ -16,11 +16,29 @@ Tanpa mouse, tanpa keyboard, tanpa build step.
 Foto diambil otomatis lewat hitung mundur 3 detik, jadi tidak ada tombol
 rana yang perlu diklik.
 
+## Mode Versus
+
+Dua anak bisa bertanding di satu layar. Pilih **2 Pemain** di menu, lalu satu
+foto diambil memuat keduanya — masing-masing menyusun salinannya di belahan
+layarnya sendiri, dan yang lebih dulu selesai menang.
+
+| Hal | Keterangan |
+| --- | --- |
+| Posisi | Berdiri bersebelahan. Yang di kiri memegang papan kiri |
+| Orientasi | **Hanya lanskap.** Di potret, pilihan 2 pemain tidak muncul |
+| Tingkat | 2×2 dan 3×3. 4×4 khusus mode 1 pemain |
+| Selama bertanding | Tiap belahan hanya punya tombol "Acak lagi" miliknya sendiri — tidak ada tombol keluar, supaya yang kalah tidak bisa membatalkan permainan lawannya |
+
+Gestur kedua belahan tidak bisa saling tabrak: kursor tiap anak terkunci di
+belahannya, dan kepingan lawan tidak bisa diambil walau kebetulan berada tepat
+di bawah kursornya.
+
 ## Untuk staf hotel
 
 | Situasi | Yang harus dilakukan |
 | --- | --- |
 | Kios nyangkut, pelacakan tangan tidak jalan | **Ketuk 3× pojok kiri-atas layar** — permainan kembali ke menu |
+| Dua anak bertanding dan ingin berhenti | Ketuk 3× pojok kiri-atas. Selama bertanding memang tidak ada tombol keluar di layar |
 | Anak pergi di tengah permainan | Tidak perlu apa-apa. Setelah 45 detik muncul peringatan, lalu kios kembali ke menu sendiri dan fotonya terhapus |
 | Layar menampilkan kartu bantuan berisi langkah-langkah | Ikuti langkah di layar; biasanya cukup muat ulang halaman |
 
@@ -37,7 +55,7 @@ ikon.svg              ikon aplikasi
 setup-aset.sh         pengunduh aset pelacak tangan + font
 sync.bat              uji + cek versi + commit + kirim ke GitHub (Windows)
 package.json          pintasan perintah; nol dependensi
-test/harness.js       32 uji permainan, tanpa browser
+test/harness.js       43 uji permainan, tanpa browser
 test/sw-harness.js    10 uji service worker
 vercel.json           header kamera + cache
 .vercelignore         berkas internal yang tidak ikut terbit
@@ -54,7 +72,7 @@ dimainkan — tidak ke CDN, tidak ke Google Fonts.
 ```bash
 npm run setup                # mengisi mediapipe/ + font/, aman diulang
 npm start                    # uji lokal di http://localhost:5500
-npm test                     # 42 uji otomatis
+npm test                     # 53 uji otomatis
 ```
 
 ## Mengirim perubahan ke GitHub

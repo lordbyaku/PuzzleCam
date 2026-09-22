@@ -85,7 +85,7 @@
 <script src="./mediapipe/camera_utils.js"></script>
 <script>
 /* ============================================================
-   PUZZLE UDARA v1.4.1
+   PUZZLE UDARA v1.5.0
    Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan.
    Tanpa mouse, tanpa keyboard, tanpa build step.
 
@@ -176,6 +176,7 @@ var foto = null;
 var tombol = [];
 var mundurSisa = 0;
 var rakMenu  = { x:0, y:0, w:0, h:0 };
+var rakMode  = { x:0, y:0, w:0, h:0 };
 var konfeti = [], kilau = [], latarKeping = [];
 var kamSiap = false;
 var lastT = 0;
@@ -335,13 +336,38 @@ function susunTombol(){
   }
 
   if (layar === 'menu'){
-    n = URUT_TINGKAT.length;
+    // 4x4 dibatasi ke mode solo: di separuh layar kepingannya mengecil dan
+    // toleransi tempel ikut mengecil, jadi anak lebih sering gagal menempel.
+    var daftarTingkat = (mode === 'versus')
+      ? URUT_TINGKAT.slice(0, 2)
+      : URUT_TINGKAT;
+    n = daftarTingkat.length;
     jarak = 14;
     // Kartu dimulai di bawah pratinjau kamera + judul. Tanpa ini, di lebar
     // HP judul yang di-tengah menabrak pratinjau di pojok kanan-atas.
     var kam = kotakKamera();
     var margAtas  = Math.max(122, H * 0.30, kam.y + kam.h + 104);
     var margBawah = 96;
+
+    // Pilihan mode hanya ditawarkan di lanskap yang cukup tinggi. Versus
+    // memang menuntut lanskap, jadi menawarkannya di potret hanya untuk
+    // menolaknya lagi lebih membingungkan daripada tidak menawarkannya.
+    var bolehMode = !potret() && (H - margAtas - margBawah) >= 200;
+    rakMode = { x:0, y:0, w:0, h:0 };
+    if (bolehMode){
+      var wm = 168, hm = 52, jm = 14;
+      var totalM = wm * 2 + jm;
+      var xm = (W - totalM) / 2;
+      rakMode = { x:xm, y:margAtas, w:totalM, h:hm };
+      tombol.push(tbl('mode-solo', '1 Pemain', null, xm, margAtas, wm, hm,
+        mode === 'solo' ? '#FFB020' : 'rgba(255,255,255,.28)',
+        gantiMode.bind(null, 'solo'), 'kecil'));
+      tombol.push(tbl('mode-versus', '2 Pemain', null, xm + wm + jm, margAtas, wm, hm,
+        mode === 'versus' ? '#FF5FA2' : 'rgba(255,255,255,.28)',
+        gantiMode.bind(null, 'versus'), 'kecil'));
+      margAtas += hm + 20;
+    }
+
     var sisa = Math.max(120, H - margAtas - margBawah);
 
     if (potret()){
@@ -352,8 +378,8 @@ function susunTombol(){
       y  = margAtas + Math.max(0, (sisa - total) / 2);
       rakMenu = { x:x0, y:y, w:w, h:total };
       for (i = 0; i < n; i++){
-        t = TINGKAT[URUT_TINGKAT[i]];
-        tombol.push(kartuTingkat(URUT_TINGKAT[i], t, x0, y + i * (h + jarak), w, h));
+        t = TINGKAT[daftarTingkat[i]];
+        tombol.push(kartuTingkat(daftarTingkat[i], t, x0, y + i * (h + jarak), w, h));
       }
     } else {
       jarak = 18;
@@ -364,8 +390,8 @@ function susunTombol(){
       y  = margAtas + Math.max(0, (sisa - h) / 2);
       rakMenu = { x:x0, y:y, w:total, h:h };
       for (i = 0; i < n; i++){
-        t = TINGKAT[URUT_TINGKAT[i]];
-        tombol.push(kartuTingkat(URUT_TINGKAT[i], t, x0 + i * (w + jarak), y, w, h));
+        t = TINGKAT[daftarTingkat[i]];
+        tombol.push(kartuTingkat(daftarTingkat[i], t, x0 + i * (w + jarak), y, w, h));
       }
     }
 
@@ -381,10 +407,26 @@ function susunTombol(){
     total = w * 3 + jarak * 2;
     x0 = (W - total) / 2;
     y  = Math.min(H - h - 24, H - 84);
-    tombol.push(tbl('acak', 'Acak lagi',     null, x0,                 y, w, h, '#45C4FF',
-                    acakKeping.bind(null, pemain[0])));
-    tombol.push(tbl('foto', 'Foto ulang',    null, x0 + (w + jarak),   y, w, h, '#FFB020', mulaiMundur));
-    tombol.push(tbl('menu', 'Ganti tingkat', null, x0 + 2*(w + jarak), y, w, h, UNGU_MUDA, keMenu));
+    if (pemain.length > 1){
+      // Selama bertanding sengaja TIDAK ada tombol keluar. Kalau ada, anak
+      // yang kalah bisa membatalkan permainan lawannya sedetik sebelum
+      // lawannya menang. Keluar lewat pulang-otomatis saat ditinggal atau
+      // ketukan staf 3x di pojok. "Acak lagi" bertuan dan hanya mengacak
+      // kepingan pemiliknya sendiri.
+      h = 54;
+      for (i = 0; i < pemain.length; i++){
+        var pm = pemain[i], km = pm.kotak;
+        w = Math.min(190, km.w - 48);
+        tombol.push(tbl('acak-' + i, 'Acak lagi', null,
+          km.x + (km.w - w)/2, Math.min(km.y + km.h - h - 24, km.y + km.h - 78),
+          w, h, pm.warna, acakKeping.bind(null, pm), 'pil', pm));
+      }
+    } else {
+      tombol.push(tbl('acak', 'Acak lagi',     null, x0,                 y, w, h, '#45C4FF',
+                      acakKeping.bind(null, pemain[0])));
+      tombol.push(tbl('foto', 'Foto ulang',    null, x0 + (w + jarak),   y, w, h, '#FFB020', mulaiMundur));
+      tombol.push(tbl('menu', 'Ganti tingkat', null, x0 + 2*(w + jarak), y, w, h, UNGU_MUDA, keMenu));
+    }
   }
 
   if (layar === 'menang'){
@@ -411,6 +453,25 @@ function gantiLayar(l){
   layar = l;
   hitungBelahan();
   susunTombol();
+}
+
+/* Berganti mode berarti menyusun ulang pemainnya. Dipanggil dari menu saja,
+   jadi tidak ada permainan berjalan yang bisa terganggu. */
+function gantiMode(m){
+  if (mode === m) return;
+  mode = m;
+  // 4x4 tidak ditawarkan di versus; kalau sedang terpilih, turunkan.
+  if (mode === 'versus' && tingkat === 'sulit') tingkat = 'sedang';
+  GRID = TINGKAT[tingkat].grid;
+  buatPemain(mode === 'versus' ? 2 : 1);
+  hitungBelahan();
+  for (var i = 0; i < pemain.length; i++){
+    var kq = pemain[i].kotak;
+    pemain[i].cursor.x = pemain[i].target.x = kq.x + kq.w / 2;
+    pemain[i].cursor.y = pemain[i].target.y = kq.y + kq.h / 2;
+  }
+  susunTombol();
+  bunyi(mode === 'versus' ? 700 : 560, 0.12);
 }
 
 function gantiSuara(){
@@ -939,6 +1000,25 @@ function latar(){
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
 
+  // Versus: tiap belahan diberi nuansa warna pemiliknya dan dipisah garis,
+  // supaya anak tahu wilayahnya tanpa perlu dijelaskan.
+  if (pemain.length > 1 && (layar === 'main' || layar === 'menang' || layar === 'mundur')){
+    for (var q = 0; q < pemain.length; q++){
+      var pk = pemain[q], kk = pk.kotak;
+      ctx.save();
+      ctx.globalAlpha = 0.07;
+      ctx.fillStyle = pk.warna;
+      ctx.fillRect(kk.x, kk.y, kk.w, kk.h);
+      ctx.restore();
+    }
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.20)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([12, 10]);
+    ctx.beginPath(); ctx.moveTo(W/2, 0); ctx.lineTo(W/2, H); ctx.stroke();
+    ctx.restore();
+  }
+
   if (layar === 'menu' || layar === 'kalibrasi'){
     ctx.save();
     ctx.globalAlpha = 0.05;
@@ -1260,7 +1340,9 @@ function gambarKalibrasi(){
 
 function gambarMenu(){
   var judul = Math.min(64, W * 0.115);
-  var yJudul = Math.max(58, rakMenu.y - (potret() ? 86 : 96));
+  // Kalau baris mode ada, judul menempel padanya, bukan pada kartu tingkat.
+  var rakAtas = rakMode.h ? rakMode : rakMenu;
+  var yJudul = Math.max(58, rakAtas.y - (potret() ? 86 : 96));
   teks('Puzzle Udara', W/2, yJudul, judul, 800, '#fff');
   teks('Susun fotomu sendiri pakai gerakan tangan',
        W/2, yJudul + judul * 0.62, Math.min(20, W * 0.042), 500, 'rgba(255,255,255,.55)');
@@ -1291,7 +1373,8 @@ function gambarMundur(){
   var p = Math.min(W * 0.5, H * 0.3, 300);
 
   gambarKamera((W - p)/2, Math.max(24, H * 0.5 - p * 0.75 - 110), p, p * 0.75, null);
-  teks('Bergaya yang keren!', W/2, H * 0.5 - 6, Math.min(32, W * 0.068), 700, '#fff');
+  teks(pemain.length > 1 ? 'Bergaya berdua!' : 'Bergaya yang keren!',
+       W/2, H * 0.5 - 6, Math.min(32, W * 0.068), 700, '#fff');
 
   ctx.save();
   ctx.translate(W/2, H * 0.5 + 92);
@@ -1380,9 +1463,19 @@ function gambarMenang(){
     var naik = hematGerak ? 0 : Math.sin(waktu/420 + b) * 5;
     bintang(W/2 + d, cy - 76 + naik, b === 1 ? 26 : 20, '#FFB020');
   }
-  teks('Selesai!', W/2, cy, Math.min(58, W * 0.125), 800, '#35E0A1');
-  teks('Kamu menyusun ' + (GRID * GRID) + ' kepingan tanpa menyentuh apa pun',
-       W/2, cy + 44, Math.min(18, W * 0.038), 500, 'rgba(255,255,255,.7)');
+  if (pemenang && pemain.length > 1){
+    var lawan = pemain[pemenang.sisi === 0 ? 1 : 0];
+    var majuLawan = 0;
+    for (var z = 0; z < lawan.keping.length; z++) if (lawan.keping[z].pas) majuLawan++;
+    teksMuat('Pemain ' + pemenang.nama + ' menang!', W/2, cy,
+             Math.min(54, W * 0.09), 800, pemenang.warnaPas, 'center', W - 60);
+    teksMuat('Lawannya sampai ' + majuLawan + ' dari ' + lawan.keping.length + ' kepingan',
+             W/2, cy + 44, Math.min(18, W * 0.028), 500, 'rgba(255,255,255,.7)', 'center', W - 80);
+  } else {
+    teks('Selesai!', W/2, cy, Math.min(58, W * 0.125), 800, '#35E0A1');
+    teks('Kamu menyusun ' + (GRID * GRID) + ' kepingan tanpa menyentuh apa pun',
+         W/2, cy + 44, Math.min(18, W * 0.038), 500, 'rgba(255,255,255,.7)');
+  }
 }
 
 function gambarPartikel(){
@@ -1632,7 +1725,12 @@ function nyalakan(){
   try {
     hands = new Hands({ locateFile: function(f){ return MP_DIR + f; } });
     hands.setOptions({
-      maxNumHands: 1,
+      // Dua tangan permanen, bukan diatur ulang saat berganti mode:
+      // menyusun ulang graf MediaPipe di tengah jalan berisiko tersendat.
+      // Di solo, bagiTangan() memilih satu tangan terdekat dengan kursor —
+      // yang kebetulan memperbaiki perilaku lama, ketika tangan orang tua
+      // yang ikut masuk bingkai bisa merebut kendali.
+      maxNumHands: 2,
       modelComplexity: MODEL,
       minDetectionConfidence: 0.6,
       minTrackingConfidence: 0.6

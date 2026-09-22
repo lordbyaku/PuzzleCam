@@ -80,3 +80,26 @@ dilepas tanpa penggantinya:
   tangan.
 - **Muat ulang sekali saat galat beruntun**, lalu kartu bantuan. Jangan
   pernah dibuat berputar muat ulang tanpa henti.
+
+## Isolasi mode versus — jangan dilonggarkan
+
+Dua anak bermain di satu layar, jadi gestur belahan kiri dan kanan tidak boleh
+saling tabrak. Lima pagar menjamin itu, dan kelimanya ditegakkan oleh
+**struktur data**, bukan pengecekan yang bisa terlewat:
+
+1. `ambil(pm)` hanya menelusuri `pm.keping` — kepingan lawan tidak ada dalam
+   daftar yang dilihatnya
+2. `layarX()` menjepit kursor ke `pm.kotak`, jadi kursor tidak pernah
+   melewati garis tengah
+3. Setengah bidang kamera dipetakan ke seluruh belahan layar pemain itu
+4. `bagiTangan()` memberi tiap pemain paling banyak satu tangan, dan hanya
+   dari belahan kameranya sendiri
+5. Tombol bertuan (`tbl(..., tuan)`) hanya menanggapi kursor tuannya
+
+Semuanya punya uji, dan uji-nya sudah dibuktikan lewat uji mutasi — tiap pagar
+dicabut satu per satu dan uji-nya memang menangkap. Kalau kamu mengubah salah
+satunya, jalankan lagi pembuktian itu; uji yang tetap hijau saat pagarnya
+dicabut berarti tidak menguji apa pun.
+
+**Selama pertandingan sengaja tidak ada tombol keluar.** Kalau ada, anak yang
+kalah bisa membatalkan permainan lawannya sedetik sebelum lawannya menang.
