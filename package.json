@@ -1,11 +1,11 @@
 {
   "name": "puzzle-udara",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "private": true,
   "description": "Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan di depan kamera. Tanpa mouse, tanpa keyboard, tanpa build step.",
   "license": "UNLICENSED",
   "scripts": {
-    "test": "node test/harness.js",
+    "test": "node test/harness.js && node test/sw-harness.js",
     "start": "python -m http.server 5500",
     "setup": "bash setup-aset.sh"
   },

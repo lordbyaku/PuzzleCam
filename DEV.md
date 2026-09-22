@@ -129,6 +129,7 @@ saat frame drop. Kalau perlu animasi, simpan `{t, dur}` pada objeknya
 | `KETUK_ZONA` | 96 px | Staf susah mengenai pojoknya | Anak tidak sengaja memicunya |
 | `KETUK_JEDA` | 1200 ms | Staf mengetuk terlalu pelan | — |
 | `BATAS_GALAT` | 60 frame | Kios terlalu sering muat ulang sendiri | — |
+| `BATAS_JARINGAN` (sw.js) | 3000 ms | Jaringan lambat tapi sehat sering dilewati | Kios terlalu lama diam di layar kosong |
 | `MODEL` | 1 | — | Set `0` untuk model ringan 2 MB di tablet lawas |
 
 `CUBIT_ON` dan `CUBIT_OFF` adalah rasio terhadap panjang telapak
@@ -141,8 +142,15 @@ ganti jadi ambang jarak tetap.
 ## 5. Uji otomatis
 
 ```bash
-npm test          # = node test/harness.js
+npm test          # = harness permainan + harness service worker
 ```
+
+Dua berkas, dijalankan berurutan:
+
+| Berkas | Isi |
+| --- | --- |
+| `test/harness.js` | 32 skenario permainan di atas stub canvas/DOM |
+| `test/sw-harness.js` | 10 skenario `sw.js` di atas stub Cache API + fetch |
 
 Tidak butuh browser dan tidak butuh `npm install`. Skrip mengambil blok
 `<script>` terakhir dari `index.html`, menjalankannya di `vm` Node di atas
@@ -183,6 +191,19 @@ Stub canvas-nya menaksir lebar teks dari `ctx.font` (~0,52 em per karakter)
 dan mencatat setiap `fillText`, jadi teks yang meluber keluar tombol ikut
 tertangkap. Taksiran itu kasar; kalau kamu mengganti fontnya, sesuaikan
 `lebarTeks()` di harness.
+
+### Harness service worker
+
+`test/sw-harness.js` menjalankan `sw.js` di atas stub Cache API dan `fetch`.
+Cakupannya: install yang sebagian gagal, pembuangan cache versi lama, dan
+tiga keadaan jaringan pada permintaan halaman — sehat (ambil versi terbaru),
+mati (pakai cache), dan **menggantung** (pakai cache setelah `BATAS_JARINGAN`).
+
+Yang ketiga itu yang paling penting dan paling mudah terlewat: wifi tamu
+hotel lebih sering menggantung daripada menolak. Uji itu menurunkan
+`BATAS_JARINGAN` jadi 60 ms supaya cepat; kalau kamu mengubah strategi
+cache halaman, pastikan uji itu tetap selesai — pada versi tanpa batas
+waktu, harness-nya menggantung selamanya, persis seperti kiosnya.
 
 Yang **tidak** dicakup: kualitas pelacakan tangan sungguhan, izin kamera,
 dan tampilan visual. Ketiganya harus dicoba manual di perangkat asli.

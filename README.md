@@ -36,7 +36,8 @@ manifest.webmanifest  mode layar penuh untuk tablet kios
 ikon.svg              ikon aplikasi
 setup-aset.sh         pengunduh aset pelacak tangan + font
 package.json          pintasan perintah; nol dependensi
-test/harness.js       32 uji otomatis, tanpa browser
+test/harness.js       32 uji permainan, tanpa browser
+test/sw-harness.js    10 uji service worker
 vercel.json           header kamera + cache
 .vercelignore         berkas internal yang tidak ikut terbit
 DEV.md                panduan developer: peta modul & konstanta tuning
@@ -52,7 +53,7 @@ dimainkan — tidak ke CDN, tidak ke Google Fonts.
 ```bash
 npm run setup                # mengisi mediapipe/ + font/, aman diulang
 npm start                    # uji lokal di http://localhost:5500
-npm test                     # 32 uji otomatis
+npm test                     # 42 uji otomatis
 ```
 
 `npm` hanya jadi pembungkus perintah — tidak ada satu pun dependensi,

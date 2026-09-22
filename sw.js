@@ -11,10 +11,14 @@
      - sisanya     -> cache dulu. Aset MediaPipe dan font tidak pernah
                       berubah tanpa ganti nama berkas, jadi aman.
 
-   VERSI WAJIB dinaikkan setiap rilis. Kalau lupa, browser akan terus
-   menyajikan aset lama dari cache lawas. Lihat DEV.md bagian 9.
+   Naikkan VERSI setiap rilis. Yang jadi basi kalau lupa hanya aset di
+   cache (font, ikon, manifest, mediapipe) — kode permainannya tetap
+   ter-update karena index.html disajikan jaringan-dulu. Lihat DEV.md
+   bagian 9.
+
+   Diuji oleh test/sw-harness.js, tanpa browser.
    ============================================================ */
-var VERSI = 'puzzleudara-v1.4.0';
+var VERSI = 'puzzleudara-v1.4.1';
 
 var ISI = [
   './',
@@ -62,23 +66,49 @@ function halamanUtama(req){
   return req.mode === 'navigate' || /\/(index\.html)?$/.test(new URL(req.url).pathname);
 }
 
+/* Jaringan dulu supaya membuka browser dari awal selalu mengambil versi
+   terbaru — TAPI dengan batas waktu.
+
+   Wifi tamu hotel punya mode gagal yang khas: tersambung, tapi tidak
+   mengantar ke mana-mana (captive portal, gateway ngadat). Di situ fetch()
+   tidak menolak, ia menggantung — dan tanpa batas waktu kios menampilkan
+   layar kosong berpuluh detik padahal salinan yang baik ada di cache.
+
+   Permintaan jaringannya tetap dibiarkan jalan di belakang layar. Kalau
+   akhirnya datang, cache ikut diperbarui, jadi pembukaan berikutnya sudah
+   memakai versi baru. */
+var BATAS_JARINGAN = 3000;   // ms
+
+function ambilHalaman(req){
+  var jaringan = fetch(req).then(function(res){
+    var salinan = res.clone();
+    caches.open(VERSI).then(function(c){ c.put(req, salinan); })['catch'](function(){});
+    return res;
+  });
+
+  var gagalJadiKosong = jaringan['catch'](function(){ return null; });
+  var jeda = new Promise(function(lanjut){
+    setTimeout(function(){ lanjut(null); }, BATAS_JARINGAN);
+  });
+
+  return Promise.race([gagalJadiKosong, jeda]).then(function(res){
+    if (res) return res;
+    return caches.match(req).then(function(c){
+      if (c) return c;
+      return caches.match('./index.html').then(function(c2){
+        return c2 || jaringan;      // belum punya cache sama sekali: tunggu saja
+      });
+    });
+  });
+}
+
 self.addEventListener('fetch', function(e){
   var req = e.request;
   if (req.method !== 'GET') return;
   if (new URL(req.url).origin !== self.location.origin) return;
 
   if (halamanUtama(req)){
-    e.respondWith(
-      fetch(req).then(function(res){
-        var salinan = res.clone();
-        caches.open(VERSI).then(function(c){ c.put(req, salinan); })['catch'](function(){});
-        return res;
-      })['catch'](function(){
-        return caches.match(req).then(function(c){
-          return c || caches.match('./index.html');
-        });
-      })
-    );
+    e.respondWith(ambilHalaman(req));
     return;
   }
 

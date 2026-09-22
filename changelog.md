@@ -7,6 +7,37 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.4.1] — 2026-09-22
+
+### Diperbaiki
+- **Aturan `Cache-Control` untuk halaman tidak pernah berlaku.** Header
+  Vercel mencocokkan path permintaan, dan orang membuka `https://situs/`,
+  bukan `https://situs/index.html`. Ditambahkan aturan untuk `/`, sehingga
+  "buka browser dari awal selalu dapat versi terbaru" tidak lagi bergantung
+  pada default Vercel yang tidak kita kontrol.
+- **`fetch` jaringan-dulu di service worker tidak punya batas waktu.** Wifi
+  tamu hotel punya mode gagal khas: tersambung tapi tidak mengantar ke mana
+  pun (captive portal, gateway ngadat). Di situ `fetch()` tidak menolak, ia
+  menggantung — dan kios menampilkan layar kosong berpuluh detik padahal
+  salinan yang baik ada di cache. Sekarang dibatasi 3 detik
+  (`BATAS_JARINGAN`), lalu jatuh ke cache. Permintaan jaringannya tetap
+  jalan di belakang layar, jadi cache ikut diperbarui untuk pembukaan
+  berikutnya.
+
+### Ditambahkan
+- `test/sw-harness.js` — 10 uji untuk `sw.js`, yang sebelumnya sama sekali
+  tidak teruji padahal menentukan apakah kios menyala saat jaringan
+  bermasalah. Mencakup install sebagian gagal, pembuangan cache lama,
+  jaringan sehat/mati/menggantung, dan strategi cache-dulu untuk aset.
+  Dijalankan `npm test` bersama harness permainan.
+
+### Catatan
+- Dokumentasi soal `VERSI` di `sw.js` diluruskan: lupa menaikkannya hanya
+  membuat aset di cache jadi basi, bukan menghentikan update kode permainan
+  — `index.html` disajikan jaringan-dulu.
+
+---
+
 ## [1.4.0] — 2026-09-22
 
 Rilis yang mengubah permainan ini dari "demo yang bagus" menjadi sesuatu yang
