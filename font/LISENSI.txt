@@ -1,0 +1,6 @@
+Baloo 2 — SIL Open Font License 1.1
+Hak cipta pemilik font-nya, bukan proyek ini.
+Teks lisensi: https://openfontlicense.org
+Sumber berkas: Google Fonts, subset latin, versi v23.
+Berkas ini boleh ikut disebarkan bersama aplikasi selama lisensinya
+ikut serta — itulah gunanya berkas ini.

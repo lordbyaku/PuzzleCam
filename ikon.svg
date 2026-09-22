@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Puzzle Udara">
+  <title>Puzzle Udara</title>
+  <!-- Latar penuh: ikon maskable boleh dipotong jadi lingkaran oleh Android,
+       jadi warnanya harus menutup seluruh kanvas. -->
+  <defs>
+    <radialGradient id="langit" cx="50%" cy="8%" r="105%">
+      <stop offset="0" stop-color="#34177E"/>
+      <stop offset="0.55" stop-color="#200F55"/>
+      <stop offset="1" stop-color="#140A38"/>
+    </radialGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#langit)"/>
+
+  <!-- Isi ditahan di dalam zona aman maskable (lingkaran r=40%): kotak
+       136..376 masih muat walau sudutnya dipangkas. -->
+  <g>
+    <rect x="136" y="136" width="104" height="104" rx="24" fill="#FFB020"/>
+    <rect x="256" y="136" width="104" height="104" rx="24" fill="#35E0A1"/>
+    <rect x="136" y="256" width="104" height="104" rx="24" fill="#45C4FF"/>
+    <!-- Kepingan terakhir melayang sedikit: itu inti permainannya,
+         kepingan yang sedang dibawa tangan ke tempatnya. -->
+    <g transform="translate(268 268) rotate(-9)">
+      <rect x="-52" y="-52" width="104" height="104" rx="24"
+            fill="#FF5FA2" stroke="#ffffff" stroke-opacity="0.85" stroke-width="7"/>
+    </g>
+  </g>
+</svg>

@@ -39,17 +39,26 @@ function el(){
           getContext:()=>ctxStub(),width:0,height:0,videoWidth:640,videoHeight:480,readyState:4};
 }
 let rafQueue=[];
+// Dihitung, bukan dilakukan: loop() boleh memuat ulang halaman sekali kalau
+// galatnya beruntun, dan itu yang perlu diuji.
+let muatUlangN=0;
+const sesi={};
 const sandbox={
   console, Math, JSON, Date, Infinity, NaN, isNaN, parseInt, parseFloat, Promise,
   setTimeout:(f,t)=>0, clearTimeout(){},
   performance:{now:()=>Date.now()},
   requestAnimationFrame:f=>{rafQueue.push(f);return 1;},
-  location:{protocol:'https:',search:''},
+  location:{protocol:'https:',search:'',reload(){muatUlangN++;}},
   navigator:{mediaDevices:{getUserMedia(){}}},
   document:{hidden:false,getElementById:()=>el(),createElement:()=>el(),
             addEventListener(){},fonts:{ready:Promise.resolve()}},
 };
 sandbox.window={innerWidth:1280,innerHeight:800,devicePixelRatio:2,addEventListener(){}};
+sandbox.window.sessionStorage={
+  getItem:k=>(Object.prototype.hasOwnProperty.call(sesi,k)?sesi[k]:null),
+  setItem:(k,v)=>{sesi[k]=String(v);},
+  removeItem:k=>{delete sesi[k];}
+};
 Object.assign(sandbox,{addEventListener(){}});
 sandbox.window.AudioContext=undefined;
 sandbox.globalThis=sandbox;
@@ -314,6 +323,108 @@ t('label tombol tidak meluber keluar pilnya',()=>{
   });
   jejakTeks.length=0;
   g.keMenu();
+});
+
+console.log('— uji perilaku kios —');
+// Semua uji di bawah berangkat dari layar main yang sudah berisi foto.
+function keLayarMain(){
+  g.window.innerWidth=1280; g.window.innerHeight=800; g.ukur();
+  g.keMenu(); hover('lv-mudah');
+  for(let i=0;i<300 && g.layar==='mundur';i++) frames(1,32);
+  assert(g.layar==='main','gagal masuk layar main, dapat '+g.layar);
+}
+
+t('ditinggal pergi: pulang ke menu dan foto dihapus',()=>{
+  keLayarMain();
+  assert(g.foto,'harus ada foto sebelum ditinggal');
+  g.onResults({multiHandLandmarks:[]});             // orangnya pergi
+  frames(Math.ceil((g.IDLE_SIAGA+g.IDLE_PULANG)/50)+4,50);
+  assert(g.layar==='menu','harus pulang ke menu, dapat '+g.layar);
+  assert(g.foto===null,'foto anak tidak boleh tertinggal di layar lobi');
+});
+
+t('peringatan idle muncul, lalu batal saat orang kembali',()=>{
+  keLayarMain();
+  g.onResults({multiHandLandmarks:[]});
+  frames(Math.ceil(g.IDLE_SIAGA/50)+2,50);
+  assert(g.diam>=g.IDLE_SIAGA,'peringatan belum aktif, diam='+g.diam);
+  assert(g.layar==='main','belum waktunya pulang');
+  g.gambar();                                        // kartu peringatan tergambar
+  g.onResults(hand(0.5,0.5,false));                  // orangnya kembali
+  frames(1,16);
+  assert(g.diam===0,'hitungan idle harus direset saat orang kembali');
+  frames(Math.ceil(g.IDLE_PULANG/50)+4,50);
+  assert(g.layar==='main','tidak boleh pulang setelah orangnya kembali');
+});
+
+t('aliran frame kamera mati dianggap tidak ada orang',()=>{
+  keLayarMain();
+  g.onResults(hand(0.5,0.5,false));                  // tangan terlihat…
+  assert(g.tanganAda===true,'tangan harusnya terdeteksi');
+  // …lalu pipeline kamera berhenti total: tidak ada onResults lagi sama sekali.
+  // Tanpa penjaga sejakFrame, tanganAda beku di true dan kios tidak pernah pulang.
+  // Anggarannya termasuk FRAME_MATI: hitungan idle baru mulai setelah itu.
+  frames(Math.ceil((g.FRAME_MATI+g.IDLE_SIAGA+g.IDLE_PULANG)/50)+6,50);
+  assert(g.layar==='menu','frame mati harus tetap memicu pulang, dapat '+g.layar);
+});
+
+t('kamera beku tidak boleh menekan tombol sendiri',()=>{
+  keLayarMain();
+  // "Ganti tingkat" dipilih supaya tombol yang tertekan sendiri langsung
+  // terlihat sebagai perpindahan layar, bukan efek samping yang senyap.
+  const b=g.tombol.find(x=>x.id==='menu');
+  assert(b,'tombol Ganti tingkat tidak ada di layar main');
+  const cx=(b.x+b.w/2)/g.W, cy=(b.y+b.h/2)/g.H;
+  g.onResults(hand(cx,cy,false));               // kursor mendarat di atas tombol
+  for(let i=0;i<10;i++){ g.onResults(hand(cx,cy,false)); frames(1,16); }
+  // Aliran frame berhenti di sini. tanganAda tetap true, kursor tetap di
+  // tombol — tanpa penjaga kesegaran, dwell akan menekannya sendiri.
+  frames(Math.ceil((g.FRAME_MATI+g.DWELL)/16)+20,16);
+  assert(g.layar==='main','tombol tertekan sendiri oleh kamera beku, layar jadi '+g.layar);
+  assert(g.hoverT===0,'dwell harus berhenti saat aliran frame mati, hoverT='+g.hoverT);
+});
+
+t('ketuk 3x pojok kiri-atas memaksa pulang ke menu',()=>{
+  keLayarMain();
+  g.ketukN=0;
+  assert(g.ketukPojok(20,20)===false,'satu ketukan belum boleh memicu');
+  assert(g.ketukPojok(30,30)===false,'dua ketukan belum boleh memicu');
+  assert(g.ketukPojok(25,25)===true,'ketukan ketiga harus memicu');
+  assert(g.layar==='menu','harus di menu, dapat '+g.layar);
+});
+
+t('ketuk di luar pojok tidak mengubah apa pun',()=>{
+  keLayarMain();
+  g.ketukN=0;
+  for(let i=0;i<6;i++) g.ketukPojok(g.W/2,g.H/2);
+  assert(g.layar==='main','ketukan di tengah layar tidak boleh memulangkan');
+  // Ketukan jauh juga harus memutus hitungan, bukan menumpuk
+  g.ketukPojok(20,20); g.ketukPojok(g.W-10,10); g.ketukPojok(20,20); g.ketukPojok(20,20);
+  assert(g.layar==='main','hitungan ketukan harus putus oleh ketukan di luar pojok');
+});
+
+t('loop memuat ulang sekali, lalu menyerah dengan kartu bantuan',()=>{
+  const tombolAsli=g.tombol, konsolAsli=g.console;
+  muatUlangN=0; delete sesi['puzzleudara.pulih'];
+  g.bootHelp.hidden=true;
+  g.galatBeruntun=0;
+  g.tombol=null;                                     // paksa gambar() melempar
+  g.console={error(){}};                             // galatnya memang disengaja
+  try {
+    for(let i=0;i<g.BATAS_GALAT+10;i++) g.loop(i*16);
+    assert(muatUlangN===1,'harus memuat ulang tepat sekali, dapat '+muatUlangN);
+    assert(g.bootHelp.hidden===true,'jangan menyerah pada percobaan pertama');
+
+    g.galatBeruntun=0;                               // rusak lagi setelah muat ulang
+    for(let i=0;i<g.BATAS_GALAT+10;i++) g.loop(5000+i*16);
+    assert(muatUlangN===1,'tidak boleh memuat ulang berulang kali');
+    assert(g.bootHelp.hidden===false,'kartu bantuan untuk staf tidak muncul');
+  } finally {
+    g.console=konsolAsli;
+    g.tombol=tombolAsli; g.galatBeruntun=0; g.bootHelp.hidden=true;
+    delete sesi['puzzleudara.pulih'];
+    g.keMenu();
+  }
 });
 
 console.log('\nhasil: '+lolos+' lolos, '+gagal+' gagal');

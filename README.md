@@ -16,24 +16,43 @@ Tanpa mouse, tanpa keyboard, tanpa build step.
 Foto diambil otomatis lewat hitung mundur 3 detik, jadi tidak ada tombol
 rana yang perlu diklik.
 
+## Untuk staf hotel
+
+| Situasi | Yang harus dilakukan |
+| --- | --- |
+| Kios nyangkut, pelacakan tangan tidak jalan | **Ketuk 3× pojok kiri-atas layar** — permainan kembali ke menu |
+| Anak pergi di tengah permainan | Tidak perlu apa-apa. Setelah 45 detik muncul peringatan, lalu kios kembali ke menu sendiri dan fotonya terhapus |
+| Layar menampilkan kartu bantuan berisi langkah-langkah | Ikuti langkah di layar; biasanya cukup muat ulang halaman |
+
+Foto anak **tidak pernah dikirim ke mana pun** — hanya ada di memori browser
+dan hilang begitu kembali ke menu.
+
 ## Isi folder
 
 ```
 index.html            permainan (satu berkas, tanpa dependensi build)
-setup-mediapipe.sh    pengunduh aset pelacak tangan
+sw.js                 service worker: tetap jalan saat wifi putus
+manifest.webmanifest  mode layar penuh untuk tablet kios
+ikon.svg              ikon aplikasi
+setup-aset.sh         pengunduh aset pelacak tangan + font
 package.json          pintasan perintah; nol dependensi
-test/harness.js       25 uji otomatis, tanpa browser
+test/harness.js       32 uji otomatis, tanpa browser
 vercel.json           header kamera + cache
+.vercelignore         berkas internal yang tidak ikut terbit
 DEV.md                panduan developer: peta modul & konstanta tuning
-mediapipe/            aset MediaPipe, dibuat oleh setup-mediapipe.sh (~24 MB)
+mediapipe/            aset MediaPipe, dibuat oleh setup-aset.sh (~24 MB)
+font/                 Baloo 2 subset latin, dibuat oleh setup-aset.sh (~33 KB)
 ```
+
+Setelah setup, permainan **tidak meminta apa pun ke jaringan luar** saat
+dimainkan — tidak ke CDN, tidak ke Google Fonts.
 
 ## Menyiapkan
 
 ```bash
-npm run setup                # mengisi folder mediapipe/, aman diulang
+npm run setup                # mengisi mediapipe/ + font/, aman diulang
 npm start                    # uji lokal di http://localhost:5500
-npm test                     # 25 uji otomatis
+npm test                     # 32 uji otomatis
 ```
 
 `npm` hanya jadi pembungkus perintah — tidak ada satu pun dependensi,

@@ -13,8 +13,9 @@ Panduan untuk developer yang meneruskan atau memodifikasi permainan ini.
 | Framework | Tidak ada. Vanilla JS, sintaks ES5 (`var`, tanpa arrow function) |
 | Render | Satu `<canvas>` penuh layar. Tidak ada elemen DOM untuk UI permainan |
 | Input | MediaPipe Hands → landmark tangan → kursor + gestur cubit |
-| Aset | Di-host sendiri di `mediapipe/`, nol permintaan ke CDN saat bermain |
-| Penyimpanan | `localStorage` satu kunci (`puzzleudara.kalibrasi`), selalu di-guard try/catch |
+| Aset | Di-host sendiri di `mediapipe/` dan `font/`; nol permintaan ke jaringan luar saat bermain |
+| Penyimpanan | `localStorage` (`puzzleudara.kalibrasi`) + `sessionStorage` (`puzzleudara.pulih`), selalu di-guard try/catch |
+| Offline | `sw.js` menyimpan seluruh aset; hanya aktif di `https://` |
 
 **Kenapa satu berkas?** Target deploy-nya statis (Vercel) dan operatornya
 staf hotel, bukan developer. Satu berkas berarti tidak ada langkah yang bisa
@@ -35,7 +36,7 @@ bisa memuat pelacak tangannya, jadi polyfill untuk itu hanya kode mati.
 ## 2. Menjalankan
 
 ```bash
-npm run setup     # = bash setup-mediapipe.sh, mengisi mediapipe/ (~24 MB)
+npm run setup     # = bash setup-aset.sh, mengisi mediapipe/ (24 MB) + font/ (33 KB)
 npm start         # = python -m http.server 5500
 npm test          # = node test/harness.js
 ```
@@ -67,12 +68,15 @@ Setiap blok di `index.html` diberi penanda `M<n>` pada komentarnya.
 | **M8** Perbarui | `perbarui(dt)`. Satu-satunya tempat state berubah per frame | Menambah logika waktu |
 | **M9** Primitif gambar | `bulat()`, `teks()`, `latar()`, `petakMini()`, `gambarTombol()` | Mengubah gaya visual |
 | **M10** Papan & kepingan | `gambarPapan()`, `gambarKeping()`, `sorotSlot()` | Mengubah tampilan puzzle |
-| **M11** Kursor & kamera | `gambarKursor()`, `gambarKamera()` | Mengubah umpan balik gestur |
-| **M12** Layar | Satu fungsi gambar per layar + `gambar()` sebagai dispatcher | Menambah layar baru |
+| **M11** Kursor & kamera | `gambarKursor()`, `gambarKamera()`, `kotakKamera()` | Mengubah umpan balik gestur |
+| **M12** Layar | Satu fungsi gambar per layar, `gambarSiagaIdle()`, `gambar()` sebagai dispatcher, `loop()` | Menambah layar baru |
 | **M13** Suara | `bunyi()` berbasis WebAudio, tanpa berkas audio | Menambah efek suara |
-| **M14** Cadangan mouse | Aktif hanya bila `?mouse=1` | — |
-| **M15** Kamera + MediaPipe | Inisialisasi, penanganan error per `err.name` | Mengubah opsi model |
-| **M16** Mulai | Penjaga protokol, pasang listener, mulai loop | — |
+| **M14** Cadangan mouse & jalan keluar staf | `?mouse=1`, `ketukPojok()`, `cobaLayarPenuh()` | Mengubah kendali staf |
+| **M15** Kamera + MediaPipe | Inisialisasi, penanganan error per `err.name`, `jagaLayarNyala()` | Mengubah opsi model |
+| **M16** Mulai | Penjaga protokol, pasang listener, daftar service worker, mulai loop | — |
+
+Berkas pendamping di luar `index.html`: `sw.js` (cache offline),
+`manifest.webmanifest` + `ikon.svg` (mode layar penuh tablet).
 
 ### Aturan pemisahan
 
@@ -118,6 +122,13 @@ saat frame drop. Kalau perlu animasi, simpan `{t, dur}` pada objeknya
 | `SNAP` | 0.55 | Kepingan susah menempel | Kepingan menempel ke slot yang salah |
 | `DETIK_MUNDUR` | 3 | Anak perlu waktu bergaya | — |
 | `JEDA_PETUNJUK` | 22000 ms | Petunjuk terlalu cepat muncul | Anak terlalu lama bingung |
+| `IDLE_SIAGA` | 45000 ms | Anak sering dianggap pergi padahal masih main | Foto terlalu lama tertinggal di layar |
+| `IDLE_PULANG` | 10000 ms | Peringatan terlalu cepat berlalu | — |
+| `FRAME_MATI` | 2000 ms | Kamera lambat dan sering dianggap mati | — |
+| `FRAME_SEGAR` | 400 ms | Dwell putus-putus di tablet lawas | — (**wajib tetap di bawah `DWELL`**) |
+| `KETUK_ZONA` | 96 px | Staf susah mengenai pojoknya | Anak tidak sengaja memicunya |
+| `KETUK_JEDA` | 1200 ms | Staf mengetuk terlalu pelan | — |
+| `BATAS_GALAT` | 60 frame | Kios terlalu sering muat ulang sendiri | — |
 | `MODEL` | 1 | — | Set `0` untuk model ringan 2 MB di tablet lawas |
 
 `CUBIT_ON` dan `CUBIT_OFF` adalah rasio terhadap panjang telapak
@@ -137,7 +148,7 @@ Tidak butuh browser dan tidak butuh `npm install`. Skrip mengambil blok
 `<script>` terakhir dari `index.html`, menjalankannya di `vm` Node di atas
 stub canvas/DOM, lalu menyuntikkan landmark tangan palsu untuk meniru pemain.
 
-Cakupannya 25 skenario:
+Cakupannya 32 skenario:
 
 - tata letak di 8 ukuran layar × 3 tingkat × 4 layar — semua tombol wajib di dalam viewport
 - alur penuh menu → tingkat → hitung mundur → menyusun 4 kepingan → menang
@@ -152,6 +163,12 @@ Cakupannya 25 skenario:
 - judul menu punya ruang cukup di bawah pratinjau kamera
 - kepingan hasil sebar awal tidak keluar dari area main
 - label tombol muat di dalam pilnya di 9 ukuran layar × 4 layar
+- ditinggal pergi: pulang ke menu dan foto terhapus
+- peringatan idle muncul lalu batal saat orang kembali
+- aliran frame kamera mati dianggap tidak ada orang
+- kamera beku tidak menekan tombol sendiri
+- ketuk 3× pojok memaksa pulang; ketuk di luar pojok tidak
+- `loop()` memuat ulang sekali lalu menyerah dengan kartu bantuan
 
 **Jalankan ini sebelum setiap commit.** Kalau kamu menambah tombol atau layar,
 tambahkan id-nya ke daftar layar di uji tata letak — itu yang paling sering
@@ -178,17 +195,25 @@ dan tampilan visual. Ketiganya harus dicoba manual di perangkat asli.
 vercel --prod
 ```
 
-- Folder `mediapipe/` **harus ikut ter-commit**. Jangan masukkan `.gitignore`.
-  Ini penyebab paling umum "deploy sukses tapi layar blank".
-- `vercel.json` memberi `Permissions-Policy: camera=(self)` dan
-  `Cache-Control: immutable` untuk `/mediapipe/*`.
+- Folder `mediapipe/` dan `font/` **harus ikut ter-commit**. Jangan masukkan
+  `.gitignore`. Ini penyebab paling umum "deploy sukses tapi layar blank".
+- **Naikkan `VERSI` di `sw.js` setiap rilis.** Kalau lupa, browser terus
+  menyajikan aset lama dari cache lawas dan perubahan Anda tidak pernah
+  sampai ke kios. Ini jebakan paling halus di proyek ini.
+- `vercel.json` memberi `Permissions-Policy: camera=(self)`,
+  `Cache-Control: immutable` untuk `/mediapipe/*` dan `/font/*`, serta
+  sengaja **melarang** cache panjang untuk `/sw.js` dan
+  `/manifest.webmanifest` — keduanya jalur update.
 - Kalau mengganti versi MediaPipe, ganti juga nama foldernya
-  (`mediapipe-v2/` + ubah `MP_DIR`) supaya cache lama tidak nyangkut.
+  (`mediapipe-v2/` + ubah `MP_DIR`) supaya cache lama tidak nyangkut. Daftar
+  berkas di `sw.js` ikut diubah.
+- `.vercelignore` menahan `DEV.md`, `changelog.md`, `README.md`, `test/`, dan
+  `setup-aset.sh` supaya tidak bisa dibuka publik di situsnya.
 - Repo git ada di tingkat `AIRTOUCH/`, bukan di dalam `PuzzleCam/`, karena
   arena ini akan menampung beberapa game (lihat bagian 7). Di Vercel, set
   **Root Directory** ke `PuzzleCam` supaya `vercel.json` terbaca.
 - `.gitattributes` memaksa LF. Tanpa itu, Git di Windows meng-checkout
-  `setup-mediapipe.sh` dengan CRLF dan bash menolak menjalankannya.
+  `setup-aset.sh` dengan CRLF dan bash menolak menjalankannya.
 
 Repo jadi ~24 MB. Untuk merampingkan, hapus `hands_solution_wasm_bin.js`
 dan `.wasm` (fallback non-SIMD, 6 MB) — semua browser sejak 2021 mendukung
@@ -228,14 +253,31 @@ setiap game mendaftarkan `{ perbarui, gambar, susunTombol }` miliknya sendiri.
 | Dialog Inggris "Failed to acquire camera feed" muncul di kios | `camera_utils` memanggil `alert()` sendiri sebelum melempar error | v1.3.1 |
 | Tangan berhenti terdeteksi diam-diam, permainan tetap tergambar | `Camera.onFrame()` dipanggil tanpa `try/catch` oleh pustakanya; satu lemparan sinkron memutus rantai frame-nya | v1.3.1 |
 | Bilah kemajuan terpotong pratinjau kamera di HP | bilah di-tengah, pratinjau di pojok kanan-atas, dan pratinjau digambar belakangan | v1.3.1 |
-| `setup-mediapipe.sh` gagal saat dijalankan ulang | tarball npm memasang berkas mode 444, `cp` biasa tidak bisa menimpa | v1.3.1 |
+| `setup-aset.sh` gagal saat dijalankan ulang | tarball npm memasang berkas mode 444, `cp` biasa tidak bisa menimpa | v1.3.1 |
 | Label tombol meluber keluar pilnya di HP | ukuran huruf dipatok, lebar pil ikut lebar layar | v1.3.1 |
+| Foto anak tertinggal di layar lobi tanpa batas waktu | tidak ada konsep "ditinggal pergi" sama sekali | v1.4.0 |
+| Kios tidak bisa diapa-apakan staf saat pelacakan bermasalah | aplikasi tidak mendengarkan satu pun sentuhan | v1.4.0 |
+| Kamera beku menekan tombol sendiri | `tanganAda` beku di `true`; kursor yang kebetulan berhenti di atas tombol menyelesaikan dwell tanpa ada orang | v1.4.0 |
 
 ### Yang belum kena tapi sudah dijaga
 
 - Posisi awal kepingan tidak pernah dijepit ke area main; di layar sangat
   pendek zona sebar bisa melewatinya. Sekarang `sebar()` memanggil
   `jagaDiArea()` dan ada uji regresinya.
+- `tanganAda` beku di nilai terakhir kalau aliran frame kamera berhenti.
+  Untuk keputusan kios, bacaannya lewat `adaOrang()` yang ikut memeriksa
+  `sejakFrame` — kalau tidak, kios yang kameranya mati tidak pernah pulang.
+
+### Hal yang sengaja tidak dilakukan
+
+- **Tidak ada polyfill `Math.hypot`.** Browser yang tidak punya itu juga
+  tidak bisa memuat WASM SIMD milik MediaPipe, jadi polyfill-nya kode mati.
+- **Service worker tidak aktif di localhost.** Cache yang menahan berkas
+  hasil edit jauh lebih merepotkan daripada manfaatnya saat mengembangkan.
+- **Layar penuh tidak dipaksa.** Browser menolaknya tanpa gestur pengguna,
+  dan permainan ini sengaja bebas gestur. Mode kios lewat flag Chrome tetap
+  jalur yang andal; `cobaLayarPenuh()` hanya memanfaatkan sentuhan yang
+  kebetulan ada.
 
 ---
 
@@ -246,8 +288,10 @@ setiap game mendaftarkan `{ perbarui, gambar, susunTombol }` miliknya sendiri.
 - Tidak ada dependensi runtime baru tanpa alasan kuat — setiap dependensi
   adalah satu lagi hal yang bisa gagal di wifi tamu hotel.
 - Setiap perubahan masuk `changelog.md` dengan semantic version, dan versinya
-  ikut diubah di tiga tempat: komentar kepala `index.html`, `package.json`,
-  dan `changelog.md`.
+  ikut diubah di **empat** tempat: komentar kepala `index.html`,
+  `package.json`, `changelog.md`, dan `VERSI` di `sw.js`. Yang terakhir paling
+  mudah terlupa dan akibatnya paling membingungkan — kios menyajikan aset lama
+  dari cache dan perubahan Anda seolah-olah tidak pernah ter-deploy.
 - `npm test` harus hijau sebelum commit. Setiap perbaikan bug yang bisa
   diuji tanpa browser wajib membawa satu skenario baru di `test/harness.js` —
   pastikan skenario itu **gagal** pada kode sebelum perbaikan.

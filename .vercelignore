@@ -1,0 +1,12 @@
+# Berkas internal: tidak dipakai saat bermain dan tidak perlu bisa dibuka
+# publik di situsnya. Tanpa berkas ini, siapa pun bisa membaca
+# https://<situs>/DEV.md.
+test/
+DEV.md
+changelog.md
+README.md
+setup-aset.sh
+
+# package.json hanya pembungkus perintah lokal. Ikut dikecualikan supaya
+# Vercel tidak salah mengira ini proyek Node yang perlu di-build.
+package.json

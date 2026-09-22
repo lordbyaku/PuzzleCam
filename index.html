@@ -7,13 +7,23 @@
 <meta name="description" content="Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan di depan kamera. Tanpa mouse, tanpa keyboard." />
 <title>Puzzle Udara — kendali tangan tanpa sentuh</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%9C%8B%3C/text%3E%3C/svg%3E" />
-<link rel="preconnect" href="https://fonts.googleapis.com" />
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<!-- Dimuat non-blocking: di wifi tamu yang memblokir fonts.googleapis.com,
-     halaman tetap tampil seketika dengan font sistem. -->
-<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&display=swap"
-      rel="stylesheet" media="print" onload="this.media='all'" />
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./ikon.svg" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="preload" href="./font/baloo2-latin.woff2" as="font" type="font/woff2" crossorigin />
 <style>
+  /* Font di-host sendiri: nol permintaan ke jaringan luar saat bermain,
+     sama seperti aset MediaPipe. Satu berkas variable (33 KB) menutup
+     seluruh bobot 500-800 yang dipakai permainan ini. */
+  @font-face{
+    font-family:'Baloo 2';
+    src:url('./font/baloo2-latin.woff2') format('woff2');
+    font-weight:500 800;
+    font-style:normal;
+    font-display:swap;
+  }
   :root{
     --malam:#140A38;
     --malam-2:#2E1470;
@@ -75,7 +85,7 @@
 <script src="./mediapipe/camera_utils.js"></script>
 <script>
 /* ============================================================
-   PUZZLE UDARA v1.3.1
+   PUZZLE UDARA v1.4.0
    Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan.
    Tanpa mouse, tanpa keyboard, tanpa build step.
 
@@ -85,7 +95,11 @@
      Cubit jempol+telunjuk -> mengambil & menyeret kepingan
      Buka tangan           -> melepas kepingan
 
-   Semua aset (model tangan + wasm) di-host sendiri di ./mediapipe/.
+   Untuk staf (bukan pemain)
+     Ketuk 3x pojok kiri-atas -> paksa kembali ke menu
+
+   Semua aset (model tangan, wasm, font) di-host sendiri. Saat bermain
+   tidak ada satu pun permintaan ke jaringan luar.
    Uji coba dengan mouse: tambahkan ?mouse=1 pada URL.
 
    Peta modul ada di DEV.md.
@@ -121,6 +135,21 @@ var JEDA_PETUNJUK= 22000;  // ms tanpa kemajuan sebelum slot tujuan berkedip
 var MP_DIR       = './mediapipe/';  // folder aset MediaPipe yang di-host sendiri
 var MODEL        = 1;      // 0 = model ringan (tablet lawas), 1 = akurat
 
+// Kios: jangan tinggalkan foto anak terpampang di layar lobi saat dia pergi.
+var IDLE_SIAGA   = 45000;  // ms tanpa tangan sebelum peringatan muncul
+var IDLE_PULANG  = 10000;  // ms hitung mundur peringatan sebelum ke menu
+var FRAME_MATI   = 2000;   // ms tanpa frame kamera -> anggap tidak ada orang
+// Ambang kedua, jauh lebih ketat, khusus untuk dwell. WAJIB di bawah DWELL:
+// kalau tidak, kamera yang membeku masih sempat menyelesaikan satu tekanan
+// tombol di dalam masa tenggangnya. Longgar sedikit supaya frame yang
+// tersendat di tablet lawas tidak membatalkan tekanan yang sedang berjalan.
+var FRAME_SEGAR  = 400;    // ms; di atas ini data tangan basi untuk dwell
+
+// Jalan keluar staf tanpa gestur tangan. Di pojok dan butuh tiga ketukan
+// supaya anak tidak memicunya tanpa sengaja.
+var KETUK_ZONA   = 96;     // px sisi kotak pojok kiri-atas
+var KETUK_JEDA   = 1200;   // ms jarak maksimum antar ketukan
+
 var UNGU_MUDA = '#B79CFF';
 
 /* ============================================================
@@ -155,6 +184,12 @@ var pakaiMouse = /[?&]mouse=1/.test(location.search);
 
 var kalib = { lihat:0, cubitOk:false, selesai:0 };
 var tanpaProgres = 0, petunjuk = null;
+
+var diam = 0;                       // ms tanpa orang di layar bermain
+var sejakFrame = FRAME_MATI;        // ms sejak frame kamera terakhir diproses
+var ketukN = 0, ketukT = 0;         // ketukan pojok untuk staf
+var kunciLayar = null;              // WakeLockSentinel, bila didukung
+var galatBeruntun = 0;              // frame galat berturut-turut di loop()
 
 /* ============================================================
    M3 · Tata letak
@@ -416,10 +451,13 @@ function jagaDiArea(p){
   p.y = jepit(p.y, areaMain.y, areaMain.y + areaMain.h - c);
 }
 
+/* Satu-satunya jalan pulang. Sengaja menghapus foto: di kios lobi, foto anak
+   tidak boleh tertinggal di layar untuk dilihat tamu berikutnya. */
 function keMenu(){
   foto = null; keping = []; digenggam = null;
   konfeti = []; kilau = []; petunjuk = null;
   pesan = '';
+  diam = 0;
   gantiLayar('menu');
 }
 
@@ -481,6 +519,7 @@ function onResults(res){
   var lm = (res && res.multiHandLandmarks && res.multiHandLandmarks.length)
     ? res.multiHandLandmarks[0] : null;
   landmark = lm;
+  sejakFrame = 0;
 
   if (!lm){
     tanganAda = false;
@@ -508,8 +547,24 @@ function onResults(res){
 /* ============================================================
    M8 · Perbarui
    ============================================================ */
+/* `tanganAda` beku pada nilai terakhir kalau aliran frame kamera berhenti
+   (kamera dicabut, pipeline mati). Untuk urusan kios itu harus dibaca
+   sebagai "tidak ada orang", bukan "tangan masih di situ" — kalau tidak,
+   kursor yang kebetulan berhenti di atas tombol akan menekannya sendiri.
+
+   Mode ?mouse=1 dikecualikan: di sana memang tidak ada aliran frame kamera
+   yang bisa dipantau kesegarannya. */
+function adaOrang(){ return tanganAda && (pakaiMouse || sejakFrame < FRAME_MATI); }
+
+/* Menahan tombol selama satu detik hanya sah kalau datanya benar-benar
+   mengalir selama itu. `adaOrang()` terlalu longgar untuk ini — masa
+   tenggangnya lebih panjang dari DWELL, jadi kamera beku masih sempat
+   menyelesaikan satu tekanan. */
+function frameSegar(){ return pakaiMouse || sejakFrame < FRAME_SEGAR; }
+
 function perbarui(dt){
   waktu += dt;
+  sejakFrame += dt;
 
   if (cursor.ada){
     var d = Math.hypot(target.x - cursor.x, target.y - cursor.y);
@@ -527,7 +582,7 @@ function perbarui(dt){
   }
 
   // dwell click
-  if (tanganAda && !digenggam && !cubit){
+  if (tanganAda && frameSegar() && !digenggam && !cubit){
     var atas = null;
     for (var i = 0; i < tombol.length; i++){
       var b = tombol[i];
@@ -546,7 +601,7 @@ function perbarui(dt){
   } else { hoverId = null; hoverT = 0; }
 
   if (layar === 'kalibrasi'){
-    if (tanganAda) kalib.lihat += dt; 
+    if (tanganAda && frameSegar()) kalib.lihat += dt;
     if (kalib.lihat > 700 && kalib.cubitOk){
       kalib.selesai += dt;
       if (kalib.selesai > 900){ tandaiKalibrasi(); keMenu(); }
@@ -569,6 +624,15 @@ function perbarui(dt){
       petunjuk.t -= dt;
       if (petunjuk.t <= 0){ petunjuk = null; tanpaProgres = 0; }
     }
+  }
+
+  // Ditinggal pergi: pulang ke menu, yang sekaligus menghapus fotonya.
+  // Hanya di layar yang memuat foto — menu dan kalibrasi boleh diam selamanya.
+  if (layar === 'mundur' || layar === 'main' || layar === 'menang'){
+    if (adaOrang()) diam = 0; else diam += dt;
+    if (diam >= IDLE_SIAGA + IDLE_PULANG) keMenu();
+  } else {
+    diam = 0;
   }
 
   for (var j = 0; j < keping.length; j++){
@@ -879,7 +943,7 @@ function kotakKamera(){
 }
 
 function gambarKursor(){
-  if (!cursor.ada || !tanganAda) return;
+  if (!cursor.ada || !adaOrang()) return;   // kamera mati -> kursor ikut hilang
   var r = cubit ? 14 : 23;
   var warna = cubit ? '#35E0A1' : '#FFB020';
 
@@ -1112,6 +1176,27 @@ function gambarPartikel(){
   }
 }
 
+/* Peringatan sebelum pulang otomatis. Digambar paling atas supaya tidak
+   tertutup kepingan, dan cukup besar untuk terbaca dari jarak berdiri. */
+function gambarSiagaIdle(){
+  if (diam < IDLE_SIAGA) return;
+  var sisa = Math.max(1, Math.ceil((IDLE_SIAGA + IDLE_PULANG - diam) / 1000));
+  var w = Math.min(430, W - 40), x = (W - w)/2;
+  var h = 92, y = Math.max(8, H/2 - h/2);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(20,10,56,.82)';
+  ctx.fillRect(0, 0, W, H);
+  bulat(x, y, w, h, 22);
+  ctx.fillStyle = 'rgba(255,176,32,.16)'; ctx.fill();
+  ctx.strokeStyle = '#FFB020'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.restore();
+
+  teksMuat('Masih di sini?', x + w/2, y + 30, 24, 700, '#FFB020', 'center', w - 28);
+  teksMuat('Angkat tangan, atau kembali ke menu dalam ' + sisa,
+           x + w/2, y + 62, 16, 500, 'rgba(255,255,255,.75)', 'center', w - 28);
+}
+
 function gambar(){
   latar();
   if (layar === 'kalibrasi') gambarKalibrasi();
@@ -1127,15 +1212,47 @@ function gambar(){
     var k = kotakKamera();
     if (kamSiap) gambarKamera(k.x, k.y, k.w, k.h, null);
   }
+  gambarSiagaIdle();
   gambarKursor();
+}
+
+/* Kios tanpa penunggu: satu galat sesaat ditelan, tapi galat yang terus
+   berulang berarti rusak permanen dan layar lobi membeku tanpa ada yang tahu.
+   Muat ulang sekali; kalau setelah itu masih rusak, tampilkan kartu bantuan
+   supaya staf tahu harus berbuat apa — jangan berputar muat ulang selamanya. */
+var BATAS_GALAT = 60;               // frame galat berturut-turut (~1 detik)
+
+function sudahPernahPulih(){
+  try { return window.sessionStorage.getItem('puzzleudara.pulih') === '1'; }
+  catch (e){ return false; }
+}
+function tandaiPulih(){
+  try { window.sessionStorage.setItem('puzzleudara.pulih', '1'); } catch (e){}
+}
+
+function tanganiGalatBeruntun(){
+  if (galatBeruntun !== BATAS_GALAT) return;   // tepat sekali, bukan tiap frame
+  if (sudahPernahPulih() || !location.reload){
+    gagal('Permainan berhenti karena galat berulang.', [
+      'Muat ulang halaman dari menu browser.',
+      'Kalau tetap terjadi, buka Console browser dan catat pesan merahnya.'
+    ]);
+    return;
+  }
+  tandaiPulih();
+  location.reload();
 }
 
 /* Loop dibungkus try/catch: satu galat gambar tidak membekukan permainan. */
 function loop(t){
   var dt = Math.min(64, t - lastT);
   lastT = t;
-  try { perbarui(dt); gambar(); }
-  catch (e){ if (console && console.error) console.error('[puzzle-udara]', e); }
+  try { perbarui(dt); gambar(); galatBeruntun = 0; }
+  catch (e){
+    if (console && console.error) console.error('[puzzle-udara]', e);
+    galatBeruntun++;
+    try { tanganiGalatBeruntun(); } catch (e2){}
+  }
   requestAnimationFrame(loop);
 }
 
@@ -1164,7 +1281,7 @@ function bunyi(freq, dur, tipe, vol){
 }
 
 /* ============================================================
-   M14 · Cadangan mouse (hanya bila URL memuat ?mouse=1)
+   M14 · Cadangan mouse & jalan keluar staf
    ============================================================ */
 if (pakaiMouse){
   window.addEventListener('mousemove', function(e){
@@ -1175,6 +1292,36 @@ if (pakaiMouse){
   });
   window.addEventListener('mousedown', function(){ if (!landmark){ cubit = true;  ambil(); } });
   window.addEventListener('mouseup',   function(){ if (!landmark){ cubit = false; lepas(); } });
+}
+
+/* Satu-satunya cara staf hotel mengembalikan permainan tanpa gestur tangan.
+   Kalau pelacakan bermasalah, tanpa ini layar kios tidak bisa diapa-apakan
+   selain me-reload browser — dan staf lobi tidak selalu bisa melakukannya.
+   Tiga ketukan di pojok supaya anak tidak memicunya tanpa sengaja. */
+function ketukPojok(x, y){
+  if (x > KETUK_ZONA || y > KETUK_ZONA){ ketukN = 0; return false; }
+  var t = waktu;
+  if (t - ketukT > KETUK_JEDA) ketukN = 0;
+  ketukT = t;
+  ketukN++;
+  if (ketukN < 3) return false;
+  ketukN = 0;
+  bunyi(520, 0.14, 'square', 0.05);
+  keMenu();
+  return true;
+}
+
+/* Kios tablet: sembunyikan address bar supaya anak tidak mengetuknya.
+   Butuh gestur pengguna, jadi hanya bisa dipicu dari sentuhan — mode kios
+   lewat flag Chrome tetap jalur yang lebih andal (lihat README). */
+function cobaLayarPenuh(){
+  var el = document.documentElement;
+  var minta = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!minta || document.fullscreenElement) return;
+  try {
+    var pr = minta.call(el);
+    if (pr && pr.catch) pr.catch(function(){});
+  } catch (e){}
 }
 
 /* ============================================================
@@ -1216,11 +1363,28 @@ function tandaiKalibrasi(){
   try { window.localStorage.setItem('puzzleudara.kalibrasi', '1'); } catch (e){}
 }
 
+/* Kios: tanpa ini layar tablet tidur di tengah sesi dan permainan
+   seolah-olah mati. Kuncinya dilepas browser saat tab tersembunyi,
+   jadi harus diminta ulang setiap kali tab kembali terlihat. */
+function jagaLayarNyala(){
+  if (!navigator.wakeLock || !navigator.wakeLock.request) return;
+  try {
+    var pr = navigator.wakeLock.request('screen');
+    if (!pr || !pr.then) return;
+    pr.then(function(kunci){
+      kunciLayar = kunci;
+      if (kunci && kunci.addEventListener){
+        kunci.addEventListener('release', function(){ kunciLayar = null; });
+      }
+    }, function(){ /* ditolak browser; permainan tetap jalan */ });
+  } catch (e){}
+}
+
 function nyalakan(){
   if (typeof Hands === 'undefined' || typeof Camera === 'undefined'){
     gagal('Berkas pelacak tangan tidak ditemukan.', [
       'Pastikan folder <b>mediapipe/</b> ikut ter-upload di sebelah index.html.',
-      'Jalankan <b>bash setup-mediapipe.sh</b> untuk mengunduh ulang asetnya.',
+      'Jalankan <b>npm run setup</b> untuk mengunduh ulang asetnya.',
       'Muat ulang halaman.'
     ]);
     return;
@@ -1280,7 +1444,11 @@ function nyalakan(){
   }
 
   Promise.resolve(kamera.start())
-    .then(function(){ pulihkanAlert(); bootPesan.textContent = 'Memuat pelacak tangan…'; })
+    .then(function(){
+      pulihkanAlert();
+      bootPesan.textContent = 'Memuat pelacak tangan…';
+      jagaLayarNyala();
+    })
     .catch(function(e){ pulihkanAlert(); var p = pesanKameraGagal(e); gagal(p[0], p[1]); });
 
   setTimeout(function(){
@@ -1301,7 +1469,7 @@ function nyalakan(){
 if (location.protocol === 'file:'){
   gagal('Halaman dibuka sebagai berkas biasa (file://).', [
     'Browser hanya mengizinkan kamera pada <b>https://</b> atau <b>http://localhost</b>.',
-    'Jalankan <b>python3 -m http.server 5500</b> di folder ini, lalu buka <b>http://localhost:5500</b>.',
+    'Jalankan <b>npm start</b> di folder ini, lalu buka <b>http://localhost:5500</b>.',
     'Atau klik kanan index.html di VS Code → <b>Open with Live Server</b>.'
   ]);
 } else if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
@@ -1316,6 +1484,27 @@ if (location.protocol === 'file:'){
   window.addEventListener('resize', ukur);
   window.addEventListener('orientationchange', function(){ setTimeout(ukur, 250); });
   document.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  // Satu-satunya sentuhan yang didengar permainan: jalan keluar staf, dan
+  // kesempatan sah meminta layar penuh (browser menolaknya tanpa gestur).
+  window.addEventListener('pointerdown', function(e){
+    if (!pakaiMouse) cobaLayarPenuh();   // saat ?mouse=1 tiap klik jadi mengganggu
+    ketukPojok(e.clientX, e.clientY);
+  });
+
+  // Browser melepas wake lock setiap tab tersembunyi; minta lagi saat kembali.
+  document.addEventListener('visibilitychange', function(){
+    if (!document.hidden && !kunciLayar) jagaLayarNyala();
+  });
+
+  // Hanya di produksi. Di localhost cache service worker cuma bikin bingung
+  // saat mengembangkan — berkas yang baru diedit tidak kunjung muncul.
+  if (location.protocol === 'https:' && navigator.serviceWorker){
+    window.addEventListener('load', function(){
+      try { navigator.serviceWorker.register('./sw.js').catch(function(){}); }
+      catch (e){}
+    });
+  }
 
   ukur();
   cursor.x = target.x = W / 2;

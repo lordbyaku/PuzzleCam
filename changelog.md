@@ -7,6 +7,56 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.4.0] — 2026-09-22
+
+Rilis yang mengubah permainan ini dari "demo yang bagus" menjadi sesuatu yang
+boleh ditinggal tanpa pengawasan di lobi.
+
+### Ditambahkan
+- **Pulang otomatis saat ditinggal.** Setelah 45 detik tanpa orang di layar
+  yang memuat foto, muncul peringatan 10 detik, lalu permainan kembali ke menu
+  — yang sekaligus menghapus fotonya. Sebelumnya foto anak bisa terpampang di
+  layar lobi tanpa batas waktu sampai ada orang lain bermain. Atur lewat
+  `IDLE_SIAGA` dan `IDLE_PULANG`.
+- **Penjaga aliran frame** (`FRAME_MATI`). Kalau pipeline kamera berhenti,
+  `tanganAda` beku di nilai terakhir. Untuk urusan kios itu kini dibaca sebagai
+  "tidak ada orang", sehingga kios tetap pulang ke menu alih-alih menggantung.
+- **Jalan keluar untuk staf:** ketuk tiga kali di pojok kiri-atas untuk memaksa
+  kembali ke menu. Sebelumnya, kalau pelacakan tangan bermasalah, staf hotel
+  sama sekali tidak bisa mengendalikan kios tanpa me-reload browser.
+- **Wake lock.** Layar tablet tidak lagi tidur di tengah sesi. Kuncinya diminta
+  ulang setiap kali tab kembali terlihat, karena browser melepasnya saat tab
+  tersembunyi.
+- **Service worker** (`sw.js`). Permainan tetap bisa dimuat walau wifi tamu
+  putus. `index.html` memakai jaringan dulu supaya deploy baru langsung
+  terlihat; aset lainnya dari cache dulu. Hanya aktif di `https://` — di
+  localhost cache cuma menyulitkan pengembangan.
+- **Manifest PWA + ikon** (`manifest.webmanifest`, `ikon.svg`) dengan
+  `display: fullscreen`, dan permintaan layar penuh saat layar disentuh.
+  Catatan: browser menolak layar penuh tanpa gestur, jadi mode kios lewat flag
+  Chrome tetap jalur yang lebih andal.
+- **Pemulihan otomatis dari galat beruntun.** 60 frame galat berturut-turut
+  memicu satu kali muat ulang; kalau setelah itu masih rusak, muncul kartu
+  bantuan untuk staf. Sebelumnya layar kios bisa membeku diam-diam.
+- `.vercelignore` — `DEV.md`, `changelog.md`, `test/`, dan skrip setup tidak
+  lagi ikut terbit dan bisa dibuka publik di `https://<situs>/DEV.md`.
+- Tujuh uji regresi baru (total 32), semuanya sudah diverifikasi **gagal** pada
+  v1.3.1. Stub harness kini punya `sessionStorage` dan `location.reload`
+  terhitung, sehingga jalur muat-ulang bisa diuji tanpa browser.
+
+### Diubah
+- **Font Baloo 2 di-host sendiri** di `font/` (satu berkas variable, 33 KB).
+  Ini menutup satu-satunya permintaan ke jaringan luar yang tersisa saat
+  bermain — janji yang sudah tertulis di DEV.md tapi belum ditepati.
+- `setup-mediapipe.sh` → **`setup-aset.sh`**, karena sekarang juga mengunduh
+  font. Titik masuknya tetap `npm run setup`.
+- `vercel.json`: `sw.js` dan `manifest.webmanifest` tidak boleh di-cache lama
+  (itu jalur update-nya), `font/` ikut `immutable`, dan ditambah
+  `Referrer-Policy: same-origin`.
+- M14 kini bernama "Cadangan mouse & jalan keluar staf".
+
+---
+
 ## [1.3.1] — 2026-09-21
 
 ### Diperbaiki
