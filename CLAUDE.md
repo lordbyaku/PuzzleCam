@@ -18,7 +18,12 @@ Semua dijalankan dari akar repo ini:
 npm run setup     # unduh aset ke mediapipe/ (24 MB) + font/ (33 KB), aman diulang
 npm start         # server uji lokal di http://localhost:5500
 npm test          # 42 uji otomatis, tanpa browser, tanpa npm install
+npm run cek-versi # pastikan versi sama di keempat tempatnya
 ```
+
+Kirim ke GitHub lewat `sync.bat`, yang menjalankan `npm test` dan
+`npm run cek-versi` lebih dulu dan menolak mengirim kalau salah satunya gagal.
+`sync.bat` wajib CRLF — `.gitattributes` sudah mengaturnya, jangan dilepas.
 
 Tidak ada build step dan tidak ada dependensi runtime. Berkas yang diedit
 persis berkas yang dijalankan browser.

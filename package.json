@@ -7,7 +7,8 @@
   "scripts": {
     "test": "node test/harness.js && node test/sw-harness.js",
     "start": "python -m http.server 5500",
-    "setup": "bash setup-aset.sh"
+    "setup": "bash setup-aset.sh",
+    "cek-versi": "node test/cek-versi.js"
   },
   "engines": {
     "node": ">=18"

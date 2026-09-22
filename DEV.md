@@ -38,8 +38,13 @@ bisa memuat pelacak tangannya, jadi polyfill untuk itu hanya kode mati.
 ```bash
 npm run setup     # = bash setup-aset.sh, mengisi mediapipe/ (24 MB) + font/ (33 KB)
 npm start         # = python -m http.server 5500
-npm test          # = node test/harness.js
+npm test          # = harness permainan + harness service worker
+npm run cek-versi # versi harus sama di index.html, package.json, changelog.md, sw.js
 ```
+
+Untuk mengirim ke GitHub, pakai `sync.bat` (Windows) — ia menjalankan kedua
+perintah terakhir di atas lebih dulu dan menolak mengirim kalau salah satunya
+gagal. `sync.bat -cek` memeriksa tanpa mengirim apa pun.
 
 `npm` di sini hanya pembungkus perintah; proyek ini nol dependensi dan tidak
 pernah butuh `npm install`. Skrip setup aman dijalankan berkali-kali.

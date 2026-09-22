@@ -7,6 +7,23 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [Belum dirilis]
+
+### Ditambahkan
+- `sync.bat` — satu klik untuk uji, cek versi, commit, lalu kirim ke GitHub.
+  Urutannya sengaja: uji dan cek versi dijalankan **sebelum** commit, jadi
+  kode yang ujinya merah atau yang `VERSI` di `sw.js`-nya tertinggal tidak
+  mungkin terkirim. `sync.bat -cek` memeriksa tanpa mengirim apa pun.
+- `npm run cek-versi` (`test/cek-versi.js`) — membandingkan versi di
+  `index.html`, `package.json`, `changelog.md`, dan `sw.js`. Aturan empat
+  tempat itu sebelumnya cuma tertulis di CLAUDE.md, dan aturan yang hanya
+  tertulis pasti suatu saat terlewat.
+- `.gitattributes` kini memaksa **CRLF** untuk `*.bat` dan `*.cmd`. Repo ini
+  memaksa LF untuk segalanya, dan `cmd.exe` bisa salah membaca label serta
+  `goto` pada batch ber-LF — gagal di tengah tanpa pesan yang jelas.
+
+---
+
 ## [1.4.1] — 2026-09-22
 
 ### Diperbaiki

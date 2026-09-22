@@ -3,6 +3,11 @@
 # dan index.html di-parse ulang oleh test/harness.js.
 * text=auto eol=lf
 
+# Batch Windows wajib CRLF. Dengan LF, cmd.exe bisa salah membaca
+# label dan goto — skripnya gagal di tengah tanpa pesan yang jelas.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
 # Aset MediaPipe: biner, jangan disentuh konversi baris.
 *.wasm      binary
 *.tflite    binary
