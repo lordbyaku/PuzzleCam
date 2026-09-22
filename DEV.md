@@ -197,9 +197,12 @@ vercel --prod
 
 - Folder `mediapipe/` dan `font/` **harus ikut ter-commit**. Jangan masukkan
   `.gitignore`. Ini penyebab paling umum "deploy sukses tapi layar blank".
-- **Naikkan `VERSI` di `sw.js` setiap rilis.** Kalau lupa, browser terus
-  menyajikan aset lama dari cache lawas dan perubahan Anda tidak pernah
-  sampai ke kios. Ini jebakan paling halus di proyek ini.
+- **Naikkan `VERSI` di `sw.js` setiap rilis.** Yang jadi basi kalau lupa
+  hanya aset di cache — `font/`, `ikon.svg`, `manifest.webmanifest`, dan
+  `mediapipe/`. Kode permainannya sendiri tetap ikut ter-update, karena
+  `index.html` disajikan jaringan-dulu. Jadi ini baru benar-benar menggigit
+  saat Anda mengubah salah satu dari keempat aset itu — tapi biasakan saja
+  menaikkannya, karena kasus itu paling sulit didiagnosis.
 - `vercel.json` memberi `Permissions-Policy: camera=(self)`,
   `Cache-Control: immutable` untuk `/mediapipe/*` dan `/font/*`, serta
   sengaja **melarang** cache panjang untuk `/sw.js` dan
