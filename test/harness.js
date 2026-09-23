@@ -681,6 +681,81 @@ t('saat bertanding pratinjau kamera di tengah dan bilah di tepi luar',()=>{
   });
 });
 
+console.log('— uji timer —');
+
+const polaJam=/^\d+:\d\d$/;
+
+t('format waktu terbaca benar',()=>{
+  [[0,'0:00','0 detik'],[5400,'0:05','5 detik'],[83000,'1:23','1 menit 23 detik'],
+   [600000,'10:00','10 menit 0 detik']].forEach(([ms,ringkas,teks])=>{
+    assert(g.waktuRingkas(ms)===ringkas,ms+' ms -> ringkas "'+g.waktuRingkas(ms)+'", harusnya "'+ringkas+'"');
+    assert(g.waktuTeks(ms)===teks,      ms+' ms -> teks "'+g.waktuTeks(ms)+'", harusnya "'+teks+'"');
+  });
+});
+
+t('jam mulai dari nol tiap ronde dan berjalan saat bermain',()=>{
+  g.window.innerWidth=1280; g.window.innerHeight=800; g.ukur();
+  g.mode='versus'; g.gantiMode('solo');
+  g.keMenu(); hover('lv-mudah');
+  for(let i=0;i<300 && g.layar==='mundur';i++) frames(1,32);
+  assert(g.layar==='main','harus masuk layar main');
+  assert(g.jamMain<200,'jam tidak mulai dari nol saat foto diambil: '+g.jamMain);
+  frames(100,50);
+  assert(Math.abs(g.jamMain-5000)<200,'jam tidak berjalan wajar: '+g.jamMain);
+});
+
+t('jam beku saat menang dan tidak berjalan lagi sesudahnya',()=>{
+  const p=P();
+  p.keping.forEach(k=>{ k.pas=true; });
+  const saatMenang=g.jamMain;
+  g.cekMenang(p);
+  assert(g.layar==='menang','harus di layar menang');
+  assert(Math.abs(g.waktuMenang-saatMenang)<1,'waktu menang tidak dibekukan pada nilai yang benar');
+  frames(100,50);
+  assert(Math.abs(g.waktuMenang-saatMenang)<1,'waktu menang ikut berubah setelah ronde selesai');
+  g.gambar();
+});
+
+t('jam direset saat kembali ke menu',()=>{
+  g.keMenu();
+  assert(g.jamMain===0 && g.waktuMenang===0,
+    'jam tidak direset: jamMain='+g.jamMain+' waktuMenang='+g.waktuMenang);
+});
+
+t('di versus jam digambar sekali saja, di tengah',()=>{
+  versusMain(1280,800);
+  jejakTeks.length=0;
+  g.gambarMain();
+  const jam=jejakTeks.filter(j=>polaJam.test(j.t));
+  assert(jam.length===1,'jam versus digambar '+jam.length+' kali, harusnya sekali');
+  assert(jam[0].rata==='center' && Math.abs(jam[0].x-g.W/2)<1,
+    'jam versus tidak di tengah: x='+jam[0].x);
+  // dan tidak menimpa papan mana pun
+  const kam=g.kotakKamera();
+  assert(jam[0].y>kam.y+kam.h,'jam menimpa pratinjau kamera');
+  g.pemain.forEach((pm,i)=>{
+    assert(jam[0].x-jam[0].w/2 > pm.papan.x+pm.papan.s || jam[0].x+jam[0].w/2 < pm.papan.x,
+      'jam menimpa papan pemain '+i);
+  });
+  jejakTeks.length=0;
+});
+
+t('di solo jam menempel di ujung bilah, bukan di tengah',()=>{
+  g.window.innerWidth=1280; g.window.innerHeight=800; g.ukur();
+  g.mode='versus'; g.gantiMode('solo');
+  g.keMenu(); hover('lv-mudah');
+  for(let i=0;i<300 && g.layar==='mundur';i++) frames(1,32);
+  jejakTeks.length=0;
+  g.gambarMain();
+  const jam=jejakTeks.filter(j=>polaJam.test(j.t));
+  assert(jam.length===1,'jam solo digambar '+jam.length+' kali, harusnya sekali');
+  const b=g.bilahKotak(P());
+  assert(jam[0].rata==='right' && Math.abs(jam[0].x-(b.x+b.w))<1,
+    'jam solo tidak menempel ujung kanan bilah: x='+jam[0].x);
+  jejakTeks.length=0;
+  g.keMenu();
+});
+
 t('pulang-otomatis tetap jalan dengan dua pemain',()=>{
   const [kiri,kanan]=versusMain();
   // salah satu masih terlihat -> jangan pulang

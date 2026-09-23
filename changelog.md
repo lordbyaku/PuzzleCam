@@ -24,6 +24,32 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.6.0] — 2026-09-23
+
+### Ditambahkan
+- **Timer di semua permainan.** Jam mulai dari nol begitu foto diambil,
+  berdetak selama menyusun, dan dibekukan pada detik seseorang menang.
+  Waktunya ditampilkan di layar menang.
+- **Di versus, jamnya bersama — bukan per pemain.** Pertandingannya balapan:
+  keduanya mulai dari foto yang sama pada detik yang sama, dan ronde berakhir
+  begitu salah satu selesai. Pemain kedua tidak pernah menuntaskan puzzle-nya,
+  jadi "waktu pemain kedua" tidak akan pernah punya nilai. Jamnya digambar di
+  tengah layar, di celah antara kedua papan — keduanya menatap angka yang
+  sama, dan itu yang membuatnya terasa balapan alih-alih dua permainan yang
+  kebetulan berdampingan.
+- Di solo, jam menempel di ujung kanan bilah kemajuan, sebaris dengan
+  pencacah kepingan. Lebar bilah dibagi supaya keduanya tidak mungkin
+  bertabrakan sesempit apa pun layarnya.
+- Enam uji timer: format waktu, jam mulai dari nol tiap ronde, beku saat
+  menang, direset saat kembali ke menu, dan posisinya di kedua mode.
+
+### Catatan
+- Layar menang solo kini berbunyi "N kepingan, tanpa menyentuh apa pun" di
+  bawah waktunya — kalimat lamanya dipendekkan supaya tiga baris tetap muat
+  di atas baris tombol.
+
+---
+
 ## [1.5.1] — 2026-09-23
 
 Dari percobaan pertama di perangkat sungguhan.

@@ -85,7 +85,7 @@
 <script src="./mediapipe/camera_utils.js"></script>
 <script>
 /* ============================================================
-   PUZZLE UDARA v1.5.1
+   PUZZLE UDARA v1.6.0
    Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan.
    Tanpa mouse, tanpa keyboard, tanpa build step.
 
@@ -185,6 +185,13 @@ var suaraAktif = true;
 var hematGerak = false;
 var pakaiMouse = /[?&]mouse=1/.test(location.search);
 var pemenang = null;                // pemain yang lebih dulu selesai
+
+/* Satu jam untuk satu ronde, bukan jam per pemain. Di versus pertandingannya
+   balapan: keduanya mulai dari foto yang sama pada detik yang sama, dan ronde
+   berakhir begitu salah satu selesai — pemain kedua tidak pernah menuntaskan
+   puzzle-nya, jadi "waktu pemain kedua" tidak pernah punya nilai. */
+var jamMain = 0;                    // ms sejak foto diambil
+var waktuMenang = 0;                // jamMain yang dibekukan saat ada yang menang
 
 var kalib = { lihat:0, cubitOk:false, selesai:0 };
 
@@ -533,6 +540,7 @@ function jepret(){
   // Satu foto, dipakai kedua pemain. Justru itu serunya di mode versus:
   // yang disusun adalah gambar kalian berdua.
   foto = c;
+  jamMain = 0; waktuMenang = 0;      // ronde baru, jam mulai dari nol
   for (var i = 0; i < pemain.length; i++) buatKeping(pemain[i]);
   gantiLayar('main');
   pesan = 'Cubit kepingannya, lalu tarik ke tempatnya';
@@ -617,6 +625,7 @@ function keMenu(){
   konfeti = []; kilau = [];
   pesan = '';
   diam = 0;
+  jamMain = 0; waktuMenang = 0;
   gantiLayar('menu');
 }
 
@@ -627,6 +636,7 @@ function cekMenang(pm){
   if (!pm.keping.length || pemenang) return;
   for (var i = 0; i < pm.keping.length; i++) if (!pm.keping[i].pas) return;
   pemenang = pm;
+  waktuMenang = jamMain;             // bekukan sebelum layar berganti
   gantiLayar('menang');
   taburKonfeti();
   bunyi(523, 0.12);
@@ -879,6 +889,7 @@ function perbarui(dt){
   }
 
   if (layar === 'main'){
+    jamMain += dt;
     for (i = 0; i < pemain.length; i++){
       p = pemain[i];
       p.tanpaProgres += dt;
@@ -1010,6 +1021,20 @@ function teksMuat(t, x, y, ukuran, berat, warna, rata, maks){
 }
 
 function mulus(t){ return t < 0 ? 0 : t > 1 ? 1 : 1 - Math.pow(1 - t, 3); }
+
+/* Dua bentuk waktu: ringkas untuk jam yang berdetak saat bermain, dan bentuk
+   kata untuk layar menang — anak membaca "1 menit 23 detik" lebih cepat
+   daripada memecah "1:23" sendiri. */
+function waktuRingkas(ms){
+  var d = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(d / 60) + ':' + ('0' + (d % 60)).slice(-2);
+}
+function waktuTeks(ms){
+  var d = Math.max(0, Math.floor(ms / 1000));
+  var m = Math.floor(d / 60), k = d % 60;
+  if (m <= 0) return k + ' detik';
+  return m + ' menit ' + k + ' detik';
+}
 
 function latar(){
   var g = ctx.createRadialGradient(W*0.5, H*0.02, 40, W*0.5, H*0.02, Math.max(W, H) * 1.15);
@@ -1445,7 +1470,25 @@ function gambarBilah(pm, selesai, jumlah){
   }
   ctx.restore();
   var label = (pemain.length > 1 ? pm.nama + '  ' : '') + selesai + ' / ' + jumlah;
-  teksMuat(label, k.xLabel, pm.kotak.y + 34, 25, 700, '#fff', k.rata, w);
+  // Lebar dibagi supaya pencacah dan jam tidak mungkin bertabrakan di layar
+  // sempit, sekecil apa pun bilahnya.
+  teksMuat(label, k.xLabel, pm.kotak.y + 34, 25, 700, '#fff', k.rata, w * 0.55);
+
+  // Di versus jamnya bersama dan digambar di tengah, bukan di tiap belahan.
+  if (!layarTerbelah()){
+    teksMuat(waktuRingkas(jamMain), x + w, pm.kotak.y + 34, 22, 700,
+             'rgba(255,255,255,.8)', 'right', w * 0.42);
+  }
+}
+
+/* Jam bersama mode versus: di tengah, tepat di bawah pratinjau kamera, di
+   celah antara kedua papan. Keduanya menatap angka yang sama — itu yang
+   membuatnya terasa balapan, bukan dua permainan yang kebetulan berdampingan. */
+function gambarJam(){
+  if (!layarTerbelah()) return;
+  var kam = kotakKamera();
+  teksMuat(waktuRingkas(jamMain), W/2, kam.y + kam.h + 28,
+           Math.min(30, W * 0.024), 800, '#fff', 'center', kam.w + 40);
 }
 
 function gambarMain(){
@@ -1473,6 +1516,8 @@ function gambarMain(){
                500, '#FFB020', 'center', pm.kotak.w - 40);
     }
   }
+
+  gambarJam();     // bersama, jadi sekali saja - di luar loop pemain
 
   if (!terbelah){
     var ket = adaPetunjuk ? 'Lihat kotak yang berkedip — kepingan itu tempatnya di situ' : pesan;
@@ -1515,12 +1560,16 @@ function gambarMenang(){
     for (var z = 0; z < lawan.keping.length; z++) if (lawan.keping[z].pas) majuLawan++;
     teksMuat('Pemain ' + pemenang.nama + ' menang!', W/2, cy,
              Math.min(54, W * 0.09), 800, pemenang.warnaPas, 'center', W - 60);
+    teksMuat(waktuTeks(waktuMenang), W/2, cy + 46,
+             Math.min(26, W * 0.042), 700, '#FFB020', 'center', W - 80);
     teksMuat('Lawannya sampai ' + majuLawan + ' dari ' + lawan.keping.length + ' kepingan',
-             W/2, cy + 44, Math.min(18, W * 0.028), 500, 'rgba(255,255,255,.7)', 'center', W - 80);
+             W/2, cy + 80, Math.min(18, W * 0.028), 500, 'rgba(255,255,255,.7)', 'center', W - 80);
   } else {
     teks('Selesai!', W/2, cy, Math.min(58, W * 0.125), 800, '#35E0A1');
-    teks('Kamu menyusun ' + (GRID * GRID) + ' kepingan tanpa menyentuh apa pun',
-         W/2, cy + 44, Math.min(18, W * 0.038), 500, 'rgba(255,255,255,.7)');
+    teksMuat(waktuTeks(waktuMenang), W/2, cy + 46,
+             Math.min(28, W * 0.055), 700, '#FFB020', 'center', W - 60);
+    teksMuat((GRID * GRID) + ' kepingan, tanpa menyentuh apa pun',
+             W/2, cy + 82, Math.min(18, W * 0.038), 500, 'rgba(255,255,255,.7)', 'center', W - 80);
   }
 }
 

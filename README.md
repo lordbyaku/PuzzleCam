@@ -28,6 +28,7 @@ layarnya sendiri, dan yang lebih dulu selesai menang.
 | Orientasi | **Hanya lanskap.** Di potret, pilihan 2 pemain tidak muncul |
 | Tingkat | 2×2 dan 3×3. 4×4 khusus mode 1 pemain |
 | Selama bertanding | Tiap belahan hanya punya tombol "Acak lagi" miliknya sendiri — tidak ada tombol keluar, supaya yang kalah tidak bisa membatalkan permainan lawannya |
+| Waktu | Satu jam bersama di tengah layar. Ronde berakhir begitu salah satu selesai, jadi waktu yang tercatat adalah waktu pemenang |
 
 Gestur kedua belahan tidak bisa saling tabrak: kursor tiap anak terkunci di
 belahannya, dan kepingan lawan tidak bisa diambil walau kebetulan berada tepat
@@ -55,7 +56,7 @@ ikon.svg              ikon aplikasi
 setup-aset.sh         pengunduh aset pelacak tangan + font
 sync.bat              uji + cek versi + commit + kirim ke GitHub (Windows)
 package.json          pintasan perintah; nol dependensi
-test/harness.js       45 uji permainan, tanpa browser
+test/harness.js       51 uji permainan, tanpa browser
 test/sw-harness.js    10 uji service worker
 vercel.json           header kamera + cache
 .vercelignore         berkas internal yang tidak ikut terbit
@@ -72,7 +73,7 @@ dimainkan — tidak ke CDN, tidak ke Google Fonts.
 ```bash
 npm run setup                # mengisi mediapipe/ + font/, aman diulang
 npm start                    # uji lokal di http://localhost:5500
-npm test                     # 55 uji otomatis
+npm test                     # 61 uji otomatis
 ```
 
 ## Mengirim perubahan ke GitHub
