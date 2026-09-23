@@ -24,6 +24,38 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.5.1] — 2026-09-23
+
+Dari percobaan pertama di perangkat sungguhan.
+
+### Diperbaiki
+- **Menu versus praktis tidak bisa dipakai.** Belahan layar ikut berlaku di
+  menu, padahal kartu tingkat ada di tengah layar — jadi satu tangan hanya
+  bisa menyentuh satu dari dua kartu. Di layar 1920 px, kartu Mudah ada di
+  693–951 sedangkan jangkauan pemain kiri mentok di 960, dan kartu Sedang
+  (969–1227) mustahil diraihnya.
+
+  Layar kini dibelah **hanya saat benar-benar ada dua papan** (`layarTerbelah()`).
+  Menu dan kalibrasi dipakai bersama, jadi di situ tiap pemain menjangkau
+  seluruh layar dan kursornya mengikuti posisi tangan yang sebenarnya.
+
+### Diubah
+- **Pratinjau kamera pindah ke tengah-atas saat bertanding** dan sedikit
+  diperbesar. Di pojok kanan, hanya anak kanan yang sempat memastikan dirinya
+  terlihat kamera; di tengah keduanya terlihat sekaligus.
+- **Bilah kemajuan dan label pemain menempel ke tepi luar belahannya.** "Kiri"
+  di pojok kiri layar, "Kanan" rata kanan di pojok kanan — tiap anak membaca
+  skornya di pojok terdekat dengannya, bukan berdempetan di garis tengah.
+- Pesan petunjuk saat bertanding ditulis di dalam belahan pemiliknya. Kalimat
+  yang melintasi garis tengah membuat anak bingung itu ditujukan kepada siapa.
+
+### Ditambahkan
+- Dua uji regresi, keduanya sudah diverifikasi gagal pada v1.5.0: seluruh
+  tombol menu terjangkau kedua pemain, dan saat bertanding pratinjau kamera
+  di tengah sementara kedua bilah menempel tepi luar tanpa tertimpa.
+
+---
+
 ## [1.5.0] — 2026-09-22
 
 ### Ditambahkan

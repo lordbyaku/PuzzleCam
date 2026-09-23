@@ -85,7 +85,7 @@
 <script src="./mediapipe/camera_utils.js"></script>
 <script>
 /* ============================================================
-   PUZZLE UDARA v1.5.0
+   PUZZLE UDARA v1.5.1
    Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan.
    Tanpa mouse, tanpa keyboard, tanpa build step.
 
@@ -273,16 +273,31 @@ function ukur(){
   }
 }
 
-/* Membagi layar jadi belahan per pemain. Solo dapat seluruh layar, versus
-   membelah kiri-kanan — searah dengan posisi tangan kedua anak di depan
-   kamera, supaya pemain kiri memegang papan kiri tanpa perlu dijelaskan. */
+/* Layar dibelah HANYA saat benar-benar ada dua papan. Menu dan kalibrasi
+   dipakai bersama, jadi di situ tiap pemain menjangkau seluruh layar.
+
+   Tanpa pembedaan ini, menu versus mustahil dipakai: kartu tingkat ada di
+   tengah layar, sementara tiap pemain terkunci di separuhnya — satu tangan
+   hanya bisa menyentuh satu dari dua kartu. */
+function layarTerbelah(){
+  return pemain.length > 1 &&
+         (layar === 'mundur' || layar === 'main' || layar === 'menang');
+}
+
+/* Membagi layar jadi belahan per pemain. Versus membelah kiri-kanan —
+   searah dengan posisi tangan kedua anak di depan kamera, supaya pemain kiri
+   memegang papan kiri tanpa perlu dijelaskan. */
 function hitungBelahan(){
-  var n = pemain.length;
-  for (var i = 0; i < n; i++){
+  var belah = layarTerbelah();
+  for (var i = 0; i < pemain.length; i++){
     var p = pemain[i];
-    p.kotak = (n === 1)
-      ? { x:0, y:0, w:W, h:H }
-      : { x:i * (W / 2), y:0, w:W / 2, h:H };
+    p.kotak = belah
+      ? { x:i * (W / 2), y:0, w:W / 2, h:H }
+      : { x:0, y:0, w:W, h:H };
+    // Kotak berubah -> tarik kursor ke dalamnya seketika, jangan tunggu
+    // beberapa frame penghalusan.
+    p.cursor.x = jepit(p.cursor.x, p.kotak.x, p.kotak.x + p.kotak.w);
+    p.cursor.y = jepit(p.cursor.y, p.kotak.y, p.kotak.y + p.kotak.h);
     hitungPapan(p);
   }
 }
@@ -675,7 +690,11 @@ function jarak(a, b){ return Math.hypot(a.x - b.x, a.y - b.y); }
 function layarX(lm, p){
   var k = p.kotak;
   var x = 1 - lm[8].x;                    // dicermin: 0 kiri layar .. 1 kanan
-  var u = (pemain.length === 1) ? x : jepit((x - p.sisi * 0.5) * 2, 0, 1);
+  // Setengah bidang kamera dipetakan ke seluruh belahan hanya saat layar
+  // terbelah. Di menu, kursor tiap anak mengikuti posisi tangannya yang
+  // sebenarnya — jadi untuk menjangkau sisi seberang ia tinggal menggeser
+  // tangannya, bukan tertahan dinding tak terlihat.
+  var u = layarTerbelah() ? jepit((x - p.sisi * 0.5) * 2, 0, 1) : x;
   return k.x + jepit((u - 0.5) * GAIN + 0.5, 0, 1) * k.w;
 }
 function layarY(lm, p){
@@ -1002,7 +1021,7 @@ function latar(){
 
   // Versus: tiap belahan diberi nuansa warna pemiliknya dan dipisah garis,
   // supaya anak tahu wilayahnya tanpa perlu dijelaskan.
-  if (pemain.length > 1 && (layar === 'main' || layar === 'menang' || layar === 'mundur')){
+  if (layarTerbelah()){
     for (var q = 0; q < pemain.length; q++){
       var pk = pemain[q], kk = pk.kotak;
       ctx.save();
@@ -1224,6 +1243,13 @@ function gambarKeping(pm, kp, diangkat){
    kemudian. Kalau ikut kamSiap, tata letak tidak pernah dihitung ulang dan
    tabrakannya balik lagi. */
 function kotakKamera(){
+  // Saat bertanding, pratinjau pindah ke tengah-atas dan sedikit diperbesar:
+  // isinya dua anak sekaligus, dan di pojok kanan hanya anak kanan yang
+  // sempat memastikan dirinya terlihat kamera.
+  if (layarTerbelah()){
+    var wv = Math.min(220, W * 0.17);
+    return { x:(W - wv)/2, y:16, w:wv, h:wv * 0.75 };
+  }
   var w = Math.min(150, W * 0.28);
   return { x:W - w - 16, y:16, w:w, h:w * 0.75 };
 }
@@ -1389,14 +1415,23 @@ function gambarMundur(){
 /* Rata kiri, bukan di tengah: pratinjau kamera memakai pojok kanan-atas
    dan di lebar HP (<= ~420px) bilah yang di-tengah selalu tertimpa. */
 function bilahKotak(pm){
-  var k = pm.kotak;
-  var x = k.x + 16, y = k.y + 62, h = 9;
-  // Hanya belahan paling kanan yang perlu menghindari pratinjau kamera:
-  // kotaknya di pojok kanan-atas layar, bukan di pojok tiap belahan.
-  var batasKanan = (pm.sisi === pemain.length - 1)
-    ? kotakKamera().x - 14
-    : k.x + k.w - 14;
-  return { x:x, y:y, h:h, w:Math.max(72, Math.min(280, batasKanan - x)) };
+  var k = pm.kotak, y = k.y + 62, h = 9;
+
+  if (layarTerbelah()){
+    // Tiap bilah menempel ke tepi LUAR belahannya, menjauh dari garis tengah
+    // tempat pratinjau kamera berada. Label pemain kanan ikut rata kanan,
+    // jadi tiap anak membaca skornya di pojok terdekat dengannya.
+    var lebar = Math.max(72, Math.min(280, k.w - 32));
+    var kiri = (pm.sisi === 0) ? k.x + 16 : k.x + k.w - 16 - lebar;
+    return { x:kiri, y:y, h:h, w:lebar,
+             rata:(pm.sisi === 0 ? 'left' : 'right'),
+             xLabel:(pm.sisi === 0 ? kiri : kiri + lebar) };
+  }
+
+  var x = k.x + 16;
+  var batasKanan = kotakKamera().x - 14;
+  var w = Math.max(72, Math.min(280, batasKanan - x));
+  return { x:x, y:y, h:h, w:w, rata:'left', xLabel:x };
 }
 
 function gambarBilah(pm, selesai, jumlah){
@@ -1410,10 +1445,11 @@ function gambarBilah(pm, selesai, jumlah){
   }
   ctx.restore();
   var label = (pemain.length > 1 ? pm.nama + '  ' : '') + selesai + ' / ' + jumlah;
-  teksMuat(label, x, pm.kotak.y + 34, 25, 700, '#fff', 'left', w);
+  teksMuat(label, k.xLabel, pm.kotak.y + 34, 25, 700, '#fff', k.rata, w);
 }
 
 function gambarMain(){
+  var terbelah = layarTerbelah();
   var adaPetunjuk = false;
   for (var q = 0; q < pemain.length; q++){
     var pm = pemain[q], i, selesai = 0;
@@ -1428,11 +1464,21 @@ function gambarMain(){
     if (pm.digenggam) gambarKeping(pm, pm.digenggam, true);
 
     gambarBilah(pm, selesai, pm.keping.length);
+
+    // Saat terbelah, pesan ditulis di dalam belahan pemiliknya — kalimat yang
+    // melintasi garis tengah membuat anak bingung itu ditujukan kepada siapa.
+    if (terbelah && pm.petunjuk){
+      teksMuat('Kotak yang berkedip itu tempatnya',
+               pm.kotak.x + pm.kotak.w/2, H - 96, Math.min(15, pm.kotak.w * 0.04),
+               500, '#FFB020', 'center', pm.kotak.w - 40);
+    }
   }
 
-  var ket = adaPetunjuk ? 'Lihat kotak yang berkedip — kepingan itu tempatnya di situ' : pesan;
-  teks(ket, W/2, H - 96, Math.min(15, W * 0.033), 500,
-       adaPetunjuk ? '#FFB020' : 'rgba(255,255,255,.45)');
+  if (!terbelah){
+    var ket = adaPetunjuk ? 'Lihat kotak yang berkedip — kepingan itu tempatnya di situ' : pesan;
+    teks(ket, W/2, H - 96, Math.min(15, W * 0.033), 500,
+         adaPetunjuk ? '#FFB020' : 'rgba(255,255,255,.45)');
+  }
 }
 
 function bintang(x, y, r, warna){

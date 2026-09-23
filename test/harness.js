@@ -455,10 +455,14 @@ function versusMain(w,h){
   g.window.innerWidth=w||1280; g.window.innerHeight=h||800; g.ukur();
   g.mode='solo'; g.gantiMode('versus');
   g.keMenu();
-  g.tingkat='mudah'; g.GRID=2; g.hitungBelahan();
+  g.tingkat='mudah'; g.GRID=2;
+  // Layar dulu, baru tata letak: belahan hanya berlaku di layar bermain, dan
+  // urutan terbalik menghasilkan keadaan yang tidak pernah terjadi sungguhan.
+  g.layar='main';
+  g.hitungBelahan();
   g.foto=g.document.createElement('canvas');
   for(let i=0;i<g.pemain.length;i++) g.buatKeping(g.pemain[i]);
-  g.layar='main'; g.susunTombol();
+  g.susunTombol();
   assert(g.pemain.length===2,'mode versus harus punya dua pemain');
   return g.pemain;
 }
@@ -630,6 +634,51 @@ t('menu versus menyembunyikan 4x4 dan tidak muncul di potret',()=>{
   assert(!g.tombol.some(b=>b.id==='mode-versus'),
     'baris mode tidak boleh muncul di potret');
   assert(g.tombol.some(b=>b.id==='lv-sulit'),'di solo potret, 4x4 harus tetap ada');
+});
+
+t('di menu versus setiap tombol terjangkau kedua pemain',()=>{
+  [[1920,1080],[1280,800],[1024,600]].forEach(([w,h])=>{
+    g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
+    g.mode='solo'; g.gantiMode('versus'); g.keMenu();
+    assert(g.pemain.length===2,'harus dua pemain');
+    // Menu dipakai bersama: belahan layar tidak boleh berlaku di sini, kalau
+    // tidak separuh kartu tingkat mustahil disentuh salah satu pemain.
+    g.pemain.forEach((pm,i)=>{
+      assert(pm.kotak.x===0 && Math.abs(pm.kotak.w-g.W)<0.5,
+        w+'x'+h+': pemain '+i+' masih terkunci di separuh layar saat di menu');
+    });
+    g.tombol.forEach(b=>{
+      g.pemain.forEach((pm,i)=>{
+        assert(!b.tuan,w+'x'+h+': tombol menu '+b.id+' tidak boleh bertuan');
+        assert(b.x>=pm.kotak.x-0.5 && b.x+b.w<=pm.kotak.x+pm.kotak.w+0.5,
+          w+'x'+h+': tombol '+b.id+' di luar jangkauan pemain '+i);
+      });
+    });
+  });
+});
+
+t('saat bertanding pratinjau kamera di tengah dan bilah di tepi luar',()=>{
+  [[1920,1080],[1280,800],[1024,600]].forEach(([w,h])=>{
+    const [kiri,kanan]=versusMain(w,h);
+    const kam=g.kotakKamera();
+    // Di tengah, supaya kedua anak sama-sama terlihat memastikan dirinya
+    assert(Math.abs((kam.x+kam.w/2)-g.W/2)<1,
+      w+'x'+h+': pratinjau kamera tidak di tengah, pusatnya '+(kam.x+kam.w/2).toFixed(0));
+
+    const bk=g.bilahKotak(kiri), bn=g.bilahKotak(kanan);
+    assert(bk.rata==='left' && bn.rata==='right',
+      w+'x'+h+': label kanan harus rata kanan, dapat '+bn.rata);
+    assert(Math.abs((bn.x+bn.w)-(kanan.kotak.x+kanan.kotak.w-16))<1,
+      w+'x'+h+': bilah kanan tidak menempel tepi kanan layar');
+    assert(Math.abs(bk.x-16)<1, w+'x'+h+': bilah kiri tidak menempel tepi kiri layar');
+
+    // Tidak satu pun bilah boleh tertimpa pratinjau di tengah
+    [[bk,'kiri'],[bn,'kanan']].forEach(([b,nm])=>{
+      const beririsan = b.x+b.w > kam.x && b.x < kam.x+kam.w &&
+                        b.y < kam.y+kam.h && b.y+b.h > kam.y;
+      assert(!beririsan, w+'x'+h+': bilah '+nm+' tertimpa pratinjau kamera');
+    });
+  });
 });
 
 t('pulang-otomatis tetap jalan dengan dua pemain',()=>{
