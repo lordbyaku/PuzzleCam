@@ -54,6 +54,13 @@ Dari percobaan pertama di perangkat sungguhan.
   tombol menu terjangkau kedua pemain, dan saat bertanding pratinjau kamera
   di tengah sementara kedua bilah menempel tepi luar tanpa tertimpa.
 
+### Perkakas
+- `sync.bat` gagal mengirim pada branch yang sudah ada di GitHub. Blok
+  penanganan gagal tersisip ke tengah jalur push, sehingga setiap `git pull`
+  yang **berhasil** justru jatuh ke pesan galat. Bug ini tidak terlihat pada
+  pengiriman pertama sebuah branch, karena jalur itu melewati `pull`
+  sepenuhnya — baru muncul pada pengiriman kedua dan seterusnya.
+
 ---
 
 ## [1.5.0] — 2026-09-22
