@@ -103,18 +103,7 @@ if errorlevel 1 goto :lewati_tarik
 
 rem Tarik dulu supaya perubahan yang dibuat lewat web GitHub tidak menabrak.
 git pull --rebase origin %CABANG%
-if errorlevel 1 goto :cabang_gagal
-echo.
-echo GAGAL: tidak bisa membaca nama branch yang sedang aktif.
-goto :akhir_gagal
-
-:cabang_lepas
-echo.
-echo GAGAL: HEAD sedang terlepas (detached), tidak berada di sebuah branch.
-echo Pindah dulu ke sebuah branch, misalnya:  git switch main
-goto :akhir_gagal
-
-:tarik_gagal
+if errorlevel 1 goto :tarik_gagal
 goto :dorong
 
 :lewati_tarik
@@ -135,7 +124,20 @@ goto :akhir
 
 rem ============================================================
 rem  Jalur gagal - masing-masing menjelaskan langkah berikutnya
+rem  Semua label di bawah ini harus berada SESUDAH "goto :akhir",
+rem  supaya alur normal tidak pernah jatuh ke sini.
 rem ============================================================
+:cabang_gagal
+echo.
+echo GAGAL: tidak bisa membaca nama branch yang sedang aktif.
+goto :akhir_gagal
+
+:cabang_lepas
+echo.
+echo GAGAL: HEAD sedang terlepas (detached), tidak berada di sebuah branch.
+echo Pindah dulu ke sebuah branch, misalnya:  git switch main
+goto :akhir_gagal
+
 :bukan_repo
 echo.
 echo GAGAL: folder ini bukan repo git.
