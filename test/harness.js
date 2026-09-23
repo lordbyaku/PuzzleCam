@@ -683,14 +683,36 @@ t('saat bertanding pratinjau kamera di tengah dan bilah di tepi luar',()=>{
 
 console.log('— uji timer —');
 
-const polaJam=/^\d+:\d\d$/;
+const polaJam=/^\d+:\d\d,\d\d$/;
 
-t('format waktu terbaca benar',()=>{
-  [[0,'0:00','0 detik'],[5400,'0:05','5 detik'],[83000,'1:23','1 menit 23 detik'],
-   [600000,'10:00','10 menit 0 detik']].forEach(([ms,ringkas,teks])=>{
-    assert(g.waktuRingkas(ms)===ringkas,ms+' ms -> ringkas "'+g.waktuRingkas(ms)+'", harusnya "'+ringkas+'"');
-    assert(g.waktuTeks(ms)===teks,      ms+' ms -> teks "'+g.waktuTeks(ms)+'", harusnya "'+teks+'"');
+t('bacaan stopwatch menit:detik,perseratus',()=>{
+  [[0,'0:00,00'],[5400,'0:05,40'],[83450,'1:23,45'],[600000,'10:00,00'],
+   [59990,'0:59,99']].forEach(([ms,harap])=>{
+    assert(g.waktuRingkas(ms)===harap,
+      ms+' ms -> "'+g.waktuRingkas(ms)+'", harusnya "'+harap+'"');
   });
+});
+
+t('jam memakai waktu nyata, bukan dt yang sudah dijepit',()=>{
+  g.window.innerWidth=1280; g.window.innerHeight=800; g.ukur();
+  g.mode='versus'; g.gantiMode('solo');
+  g.keMenu(); hover('lv-mudah');
+  for(let i=0;i<300 && g.layar==='mundur';i++) frames(1,32);
+  assert(g.layar==='main','harus di layar main');
+
+  // Satu frame yang tersendat berat: animasi dijepit 64 ms, tapi waktu nyata
+  // yang berlalu 200 ms. Jam harus mencatat 200, kalau tidak ia melambat di
+  // frame rate rendah — di 12 fps meleset 14 detik per menit.
+  const awal=g.jamMain;
+  g.perbarui(64,200);
+  assert(Math.abs((g.jamMain-awal)-200)<1,
+    'jam hanya bertambah '+(g.jamMain-awal).toFixed(0)+' ms dari 200 ms waktu nyata');
+
+  // Tanpa argumen kedua (seperti seluruh uji lain), keduanya sama
+  const b=g.jamMain;
+  g.perbarui(50);
+  assert(Math.abs((g.jamMain-b)-50)<1,'perbarui(dt) tunggal harus memakai dt itu sendiri');
+  g.keMenu();
 });
 
 t('jam mulai dari nol tiap ronde dan berjalan saat bermain',()=>{
@@ -754,6 +776,36 @@ t('di solo jam menempel di ujung bilah, bukan di tengah',()=>{
     'jam solo tidak menempel ujung kanan bilah: x='+jam[0].x);
   jejakTeks.length=0;
   g.keMenu();
+});
+
+t('tidak ada label usia di kartu tingkat mana pun',()=>{
+  [[1280,800],[390,844]].forEach(([w,h])=>{
+    g.window.innerWidth=w; g.window.innerHeight=h; g.ukur();
+    ['solo','versus'].forEach(m=>{
+      g.mode = (m==='solo') ? 'versus' : 'solo';
+      g.gantiMode(m); g.keMenu();
+      jejakTeks.length=0;
+      g.tombol.forEach(b2=>g.gambarTombol(b2));
+      jejakTeks.forEach(j=>{
+        assert(!/tahun/i.test(j.t),
+          w+'x'+h+' '+m+': masih ada label usia di menu -> "'+j.t+'"');
+      });
+      jejakTeks.length=0;
+    });
+  });
+});
+
+t('kredit pembuat tergambar di tengah bawah menu',()=>{
+  g.window.innerWidth=1280; g.window.innerHeight=800; g.ukur();
+  g.mode='versus'; g.gantiMode('solo'); g.keMenu();
+  jejakTeks.length=0;
+  g.gambarMenu();
+  const k=jejakTeks.filter(j=>j.t===g.KREDIT);
+  assert(k.length===1,'kredit digambar '+k.length+' kali, harusnya sekali');
+  assert(k[0].rata==='center' && Math.abs(k[0].x-g.W/2)<1,'kredit tidak di tengah');
+  assert(k[0].y>g.H-40,'kredit tidak di bagian bawah layar: y='+k[0].y);
+  assert(k[0].x-k[0].w/2>=0 && k[0].x+k[0].w/2<=g.W,'kredit keluar layar');
+  jejakTeks.length=0;
 });
 
 t('pulang-otomatis tetap jalan dengan dua pemain',()=>{

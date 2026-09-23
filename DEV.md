@@ -155,14 +155,14 @@ Dua berkas, dijalankan berurutan:
 
 | Berkas | Isi |
 | --- | --- |
-| `test/harness.js` | 51 skenario permainan di atas stub canvas/DOM |
+| `test/harness.js` | 54 skenario permainan di atas stub canvas/DOM |
 | `test/sw-harness.js` | 10 skenario `sw.js` di atas stub Cache API + fetch |
 
 Tidak butuh browser dan tidak butuh `npm install`. Skrip mengambil blok
 `<script>` terakhir dari `index.html`, menjalankannya di `vm` Node di atas
 stub canvas/DOM, lalu menyuntikkan landmark tangan palsu untuk meniru pemain.
 
-Cakupannya 51 skenario:
+Cakupannya 54 skenario:
 
 - tata letak di 8 ukuran layar × 3 tingkat × 4 layar — semua tombol wajib di dalam viewport
 - alur penuh menu → tingkat → hitung mundur → menyusun 4 kepingan → menang
@@ -188,8 +188,11 @@ Cakupannya 51 skenario:
   bawah kursor; dua tangan di belahan sama hanya menggerakkan satu pemain;
   tombol bertuan menolak kursor lawan; tangan yang menyeberang saat
   menggenggam tidak berpindah pemain
-- **timer:** format waktu, mulai dari nol tiap ronde, beku saat menang,
-  direset ke menu, dan posisinya di solo (ujung bilah) maupun versus (tengah)
+- **timer:** bacaan stopwatch `m:dd,cc`, jam memakai waktu nyata bukan `dt`
+  yang dijepit, mulai dari nol tiap ronde, beku saat menang, direset ke menu,
+  dan posisinya di solo (ujung bilah) maupun versus (tengah)
+- **menu:** tidak ada label usia di kartu tingkat, dan baris kredit pembuat
+  tergambar sekali di tengah bawah
 - **versus, tata letak bersama:** seluruh tombol menu terjangkau kedua pemain
   (belahan layar tidak berlaku di menu); saat bertanding pratinjau kamera di
   tengah dan kedua bilah menempel tepi luar tanpa tertimpa

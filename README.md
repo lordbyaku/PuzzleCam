@@ -56,7 +56,7 @@ ikon.svg              ikon aplikasi
 setup-aset.sh         pengunduh aset pelacak tangan + font
 sync.bat              uji + cek versi + commit + kirim ke GitHub (Windows)
 package.json          pintasan perintah; nol dependensi
-test/harness.js       51 uji permainan, tanpa browser
+test/harness.js       54 uji permainan, tanpa browser
 test/sw-harness.js    10 uji service worker
 vercel.json           header kamera + cache
 .vercelignore         berkas internal yang tidak ikut terbit
@@ -73,7 +73,7 @@ dimainkan — tidak ke CDN, tidak ke Google Fonts.
 ```bash
 npm run setup                # mengisi mediapipe/ + font/, aman diulang
 npm start                    # uji lokal di http://localhost:5500
-npm test                     # 61 uji otomatis
+npm test                     # 64 uji otomatis
 ```
 
 ## Mengirim perubahan ke GitHub

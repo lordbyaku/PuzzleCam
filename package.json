@@ -1,6 +1,6 @@
 {
   "name": "puzzle-udara",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "description": "Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan di depan kamera. Tanpa mouse, tanpa keyboard, tanpa build step.",
   "license": "UNLICENSED",

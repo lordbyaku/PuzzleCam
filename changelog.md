@@ -24,6 +24,36 @@ dan proyek ini memakai [Semantic Versioning](https://semver.org/lang/id/).
 
 ---
 
+## [1.7.0] — 2026-09-23
+
+### Diperbaiki
+- **Jam melambat saat frame tersendat.** `dt` sengaja dijepit 64 ms demi
+  kewarasan animasi dan dwell, tapi jam ikut memakainya — di 12 fps jam
+  berjalan 77% dari waktu nyata, meleset **14 detik per menit**. Dengan detik
+  bulat itu nyaris tak terasa; begitu perseratus detik ditampilkan, ia langsung
+  kentara. Jam kini memakai waktu nyata yang dijepit longgar di 1 detik: benar
+  sampai 1 fps, tapi tetap mencegah lompatan saat tab yang lama tersembunyi
+  kembali aktif. Ini penting justru karena `maxNumHands: 2` berpotensi
+  menurunkan frame rate di tablet target.
+
+### Diubah
+- **Timer jadi bacaan stopwatch: `1:23,45`.** Perseratus detik, memakai koma
+  sebagai pemisah desimal sesuai kaidah bahasa Indonesia. Bentuknya sama
+  persis saat bermain maupun di layar menang — angka yang ditatap pemain
+  selama bermain tidak berubah wujud di akhir.
+- **Label usia dihapus dari semua kartu tingkat.** Permainan ini terbuka untuk
+  siapa pun, termasuk orang dewasa; tingkat dipilih dari selera tantangannya,
+  bukan dari umurnya. Kartu kini hanya menampilkan "2×2", "3×3", "4×4".
+
+### Ditambahkan
+- Baris kredit pembuat di tengah bawah menu. Ia hanya digambar kalau kartu
+  tingkat benar-benar berhenti di atasnya — di layar sangat pendek ruangnya
+  habis dan teks akan menimpa kartu.
+- Empat uji: bacaan stopwatch, jam yang memakai waktu nyata alih-alih `dt`
+  terjepit, tidak adanya label usia di kedua mode, dan posisi baris kredit.
+
+---
+
 ## [1.6.0] — 2026-09-23
 
 ### Ditambahkan

@@ -85,7 +85,7 @@
 <script src="./mediapipe/camera_utils.js"></script>
 <script>
 /* ============================================================
-   PUZZLE UDARA v1.6.0
+   PUZZLE UDARA v1.7.0
    Puzzle foto yang dimainkan sepenuhnya dengan gerakan tangan.
    Tanpa mouse, tanpa keyboard, tanpa build step.
 
@@ -118,9 +118,11 @@ var bootBar   = document.getElementById('bootBar');
 var bootHelp  = document.getElementById('bootBantuan');
 
 var TINGKAT = {
-  mudah : { grid:2, nama:'Mudah',  usia:'5–6 tahun',   warna:'#35E0A1' },
-  sedang: { grid:3, nama:'Sedang', usia:'7–9 tahun',   warna:'#45C4FF' },
-  sulit : { grid:4, nama:'Sulit',  usia:'10–13 tahun', warna:'#FF5FA2' }
+  // Tanpa label usia: permainan ini terbuka untuk siapa pun, termasuk orang
+  // dewasa. Tingkat dipilih dari selera tantangannya, bukan dari umurnya.
+  mudah : { grid:2, nama:'Mudah',  warna:'#35E0A1' },
+  sedang: { grid:3, nama:'Sedang', warna:'#45C4FF' },
+  sulit : { grid:4, nama:'Sulit',  warna:'#FF5FA2' }
 };
 var URUT_TINGKAT = ['mudah','sedang','sulit'];
 
@@ -157,6 +159,8 @@ var KETUK_JEDA   = 1200;   // ms jarak maksimum antar ketukan
 var SISI_MARGIN  = 0.06;   // bagian dari lebar bingkai kamera
 
 var UNGU_MUDA = '#B79CFF';
+
+var KREDIT = 'Dev By : Haritrisna Suryadimarta | 08562717803';
 
 // Identitas tiap pemain. Indeks = sisi layar: 0 kiri, 1 kanan.
 var SOSOK = [
@@ -466,7 +470,7 @@ function susunTombol(){
 }
 
 function kartuTingkat(kunci, t, x, y, w, h){
-  var b = tbl('lv-' + kunci, t.nama, t.usia, x, y, w, h, t.warna, mulaiTingkat.bind(null, kunci), 'kartu');
+  var b = tbl('lv-' + kunci, t.nama, null, x, y, w, h, t.warna, mulaiTingkat.bind(null, kunci), 'kartu');
   b.grid = t.grid;
   return b;
 }
@@ -847,7 +851,13 @@ function dwell(p, dt){
   return atas;
 }
 
-function perbarui(dt){
+/* `dt` dijepit 64 ms demi kewarasan animasi dan dwell saat frame tersendat.
+   Untuk jam, penjepitan itu racun: di 12 fps jam akan berjalan 77% dari waktu
+   nyata — meleset 14 detik per menit, dan dengan perseratus detik itu langsung
+   kentara. Jadi jam memakai `dtNyata` yang tidak dijepit sekeras itu.
+   Harness memanggil perbarui(dt) tanpa argumen kedua; di situ keduanya sama. */
+function perbarui(dt, dtNyata){
+  if (dtNyata === undefined) dtNyata = dt;
   waktu += dt;
   sejakFrame += dt;
 
@@ -889,7 +899,7 @@ function perbarui(dt){
   }
 
   if (layar === 'main'){
-    jamMain += dt;
+    jamMain += dtNyata;
     for (i = 0; i < pemain.length; i++){
       p = pemain[i];
       p.tanpaProgres += dt;
@@ -1022,18 +1032,15 @@ function teksMuat(t, x, y, ukuran, berat, warna, rata, maks){
 
 function mulus(t){ return t < 0 ? 0 : t > 1 ? 1 : 1 - Math.pow(1 - t, 3); }
 
-/* Dua bentuk waktu: ringkas untuk jam yang berdetak saat bermain, dan bentuk
-   kata untuk layar menang — anak membaca "1 menit 23 detik" lebih cepat
-   daripada memecah "1:23" sendiri. */
+/* Bacaan stopwatch: menit:detik,perseratus. Koma, bukan titik, karena itu
+   pemisah desimal bahasa Indonesia dan seluruh antarmuka ini berbahasa
+   Indonesia. Bentuknya sama persis saat bermain maupun di layar menang —
+   angka yang ditatap pemain selama bermain tidak boleh berubah wujud di akhir. */
 function waktuRingkas(ms){
-  var d = Math.max(0, Math.floor(ms / 1000));
-  return Math.floor(d / 60) + ':' + ('0' + (d % 60)).slice(-2);
-}
-function waktuTeks(ms){
-  var d = Math.max(0, Math.floor(ms / 1000));
-  var m = Math.floor(d / 60), k = d % 60;
-  if (m <= 0) return k + ' detik';
-  return m + ' menit ' + k + ' detik';
+  var total = Math.max(0, Math.floor(ms / 10));   // dalam perseratus detik
+  var cs = total % 100;
+  var d  = Math.floor(total / 100);
+  return Math.floor(d / 60) + ':' + ('0' + (d % 60)).slice(-2) + ',' + ('0' + cs).slice(-2);
 }
 
 function latar(){
@@ -1149,7 +1156,7 @@ function gambarTombol(b){
     var ySub   = lebar ? y + h/2 + 14 : my + mini + 38;
     var maks   = lebar ? (x + w - 14) - tx : w - 20;
     teksMuat(b.label, tx, yJudul, Math.min(27, h * 0.26), 700, utama, rata, maks);
-    teksMuat(b.grid + '×' + b.grid + ' · ' + b.sub, tx, ySub,
+    teksMuat(b.grid + '×' + b.grid + (b.sub ? ' · ' + b.sub : ''), tx, ySub,
              Math.min(16, h * 0.16), 500, kedua, rata, maks);
   } else if (b.gaya === 'kecil'){
     teksMuat(b.label, x + w/2, y + h/2, 15, 600, utama, 'center', w - 14);
@@ -1412,8 +1419,18 @@ function gambarMenu(){
          W/2, yPetunjuk, Math.min(16, W * 0.034), 600, 'rgba(255,255,255,.5)');
   }
 
-  teks('Cubit untuk mengambil kepingan  ·  Buka tangan untuk melepas',
-       W/2, H - 26, Math.min(14, W * 0.03), 500, 'rgba(255,255,255,.32)');
+  // Dua baris paling bawah: petunjuk gestur, lalu kredit pembuat. Keduanya
+  // hanya digambar kalau kartu tingkat benar-benar berhenti di atasnya —
+  // di layar sangat pendek ruangnya habis dan teks akan menimpa kartu.
+  var ruangBawah = H - (rakMenu.y + rakMenu.h);
+  if (ruangBawah >= 58){
+    teks('Cubit untuk mengambil kepingan  ·  Buka tangan untuk melepas',
+         W/2, H - 44, Math.min(14, W * 0.03), 500, 'rgba(255,255,255,.32)');
+  }
+  if (ruangBawah >= 30){
+    teksMuat(KREDIT, W/2, H - 18, Math.min(13, W * 0.026), 500,
+             'rgba(255,255,255,.28)', 'center', W - 40);
+  }
 }
 
 function gambarMundur(){
@@ -1560,14 +1577,14 @@ function gambarMenang(){
     for (var z = 0; z < lawan.keping.length; z++) if (lawan.keping[z].pas) majuLawan++;
     teksMuat('Pemain ' + pemenang.nama + ' menang!', W/2, cy,
              Math.min(54, W * 0.09), 800, pemenang.warnaPas, 'center', W - 60);
-    teksMuat(waktuTeks(waktuMenang), W/2, cy + 46,
-             Math.min(26, W * 0.042), 700, '#FFB020', 'center', W - 80);
+    teksMuat(waktuRingkas(waktuMenang), W/2, cy + 46,
+             Math.min(30, W * 0.05), 800, '#FFB020', 'center', W - 80);
     teksMuat('Lawannya sampai ' + majuLawan + ' dari ' + lawan.keping.length + ' kepingan',
              W/2, cy + 80, Math.min(18, W * 0.028), 500, 'rgba(255,255,255,.7)', 'center', W - 80);
   } else {
     teks('Selesai!', W/2, cy, Math.min(58, W * 0.125), 800, '#35E0A1');
-    teksMuat(waktuTeks(waktuMenang), W/2, cy + 46,
-             Math.min(28, W * 0.055), 700, '#FFB020', 'center', W - 60);
+    teksMuat(waktuRingkas(waktuMenang), W/2, cy + 46,
+             Math.min(34, W * 0.065), 800, '#FFB020', 'center', W - 60);
     teksMuat((GRID * GRID) + ' kepingan, tanpa menyentuh apa pun',
              W/2, cy + 82, Math.min(18, W * 0.038), 500, 'rgba(255,255,255,.7)', 'center', W - 80);
   }
@@ -1662,9 +1679,15 @@ function tanganiGalatBeruntun(){
 
 /* Loop dibungkus try/catch: satu galat gambar tidak membekukan permainan. */
 function loop(t){
-  var dt = Math.min(64, t - lastT);
+  // Dua ukuran waktu dari satu frame: `dt` dijepit ketat untuk animasi, dan
+  // `dtNyata` dijepit longgar untuk jam. Batas 1 detik menjaga jam tetap benar
+  // sampai 1 fps, tapi tetap mencegah lompatan berjam-jam saat tab yang lama
+  // tersembunyi kembali aktif.
+  var lewat = t - lastT;
+  var dt = Math.min(64, lewat);
+  var dtNyata = Math.min(1000, lewat);
   lastT = t;
-  try { perbarui(dt); gambar(); galatBeruntun = 0; }
+  try { perbarui(dt, dtNyata); gambar(); galatBeruntun = 0; }
   catch (e){
     if (console && console.error) console.error('[puzzle-udara]', e);
     galatBeruntun++;
